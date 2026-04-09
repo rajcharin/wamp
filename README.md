@@ -91,7 +91,7 @@ Views subscribe to model changes via **Combine** publishers — no delegates, no
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/Wamp.git
+git clone https://github.com/wishval/wamp.git
 cd Wamp
 
 # Build from command line
@@ -99,6 +99,9 @@ xcodebuild -project Wamp.xcodeproj -scheme Wamp -configuration Debug build
 
 # Or just open in Xcode and hit ⌘R
 open Wamp.xcodeproj
+
+# Open .app
+open ~/Library/Developer/Xcode/DerivedData/Wamp-*/Build/Products/Debug/Wamp.app
 ```
 
 ## Keyboard Shortcuts
