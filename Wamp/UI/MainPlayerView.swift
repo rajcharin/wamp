@@ -7,6 +7,7 @@ class MainPlayerView: NSView {
     var onToggleEQ: (() -> Void)?
     var onTogglePL: (() -> Void)?
     var onTogglePin: (() -> Void)?
+    var onToggleINFO: (() -> Void)?
 
     var isEQActive: Bool {
         get { eqButton.isActive }
@@ -15,6 +16,10 @@ class MainPlayerView: NSView {
     var isPLActive: Bool {
         get { plButton.isActive }
         set { plButton.isActive = newValue }
+    }
+    var isINFOActive: Bool {
+        get { infoButton.isActive }
+        set { infoButton.isActive = newValue }
     }
     var isPinned: Bool {
         get { titleBar.isPinned }
@@ -29,6 +34,8 @@ class MainPlayerView: NSView {
     private let seekSlider = WinampSlider(style: .seek)
     private let volumeSlider = WinampSlider(style: .volume)
     private let balanceSlider = WinampSlider(style: .balance)
+    private let speedSlider = WinampSlider(style: .seek)
+    private let speedLabel = NSTextField(labelWithString: "SPD 1.0x")
     private let transportBar = TransportBar()
 
     // Toggle buttons
@@ -36,6 +43,7 @@ class MainPlayerView: NSView {
     private let repeatButton = WinampButton(title: "", style: .toggle)
     private let eqButton = WinampButton(title: "EQ", style: .toggle)
     private let plButton = WinampButton(title: "PL", style: .toggle)
+    private let infoButton = WinampButton(title: "INFO", style: .toggle)
 
     // Info labels
     private let bitrateLabel = NSTextField(labelWithString: "")
@@ -88,6 +96,8 @@ class MainPlayerView: NSView {
         titleBar.titleText = "WAMP"
         titleBar.showButtons = true
         titleBar.showThemeButton = true
+        titleBar.showSleepButton = true
+        titleBar.showOutputButton = true
         titleBar.onClose = { NSApp.terminate(nil) }
         titleBar.onMinimize = { [weak self] in self?.window?.miniaturize(nil) }
         titleBar.onTogglePin = { [weak self] in self?.onTogglePin?() }
@@ -145,6 +155,22 @@ class MainPlayerView: NSView {
         balanceSlider.minValue = 0
         balanceSlider.maxValue = 1
         addSubview(balanceSlider)
+
+        // Speed slider
+        speedSlider.minValue = 0.5
+        speedSlider.maxValue = 2.0
+        speedSlider.value = 1.0
+        addSubview(speedSlider)
+
+        // Speed label
+        speedLabel.isBezeled = false
+        speedLabel.drawsBackground = false
+        speedLabel.isEditable = false
+        speedLabel.isSelectable = false
+        speedLabel.font = WinampTheme.bitrateFont
+        speedLabel.textColor = WinampTheme.greenDimText
+        speedLabel.alignment = .right
+        addSubview(speedLabel)
 
         // Transport bar
         addSubview(transportBar)
@@ -216,11 +242,13 @@ class MainPlayerView: NSView {
         }
         addSubview(repeatButton)
 
-        // EQ / PL buttons
+        // EQ / PL / INFO buttons
         eqButton.isActive = true
         plButton.isActive = true
+        infoButton.isActive = false
         addSubview(eqButton)
         addSubview(plButton)
+        addSubview(infoButton)
 
         // Button actions
         shuffleButton.onClick = { [weak self] in
@@ -233,6 +261,7 @@ class MainPlayerView: NSView {
         }
         eqButton.onClick = { [weak self] in self?.onToggleEQ?() }
         plButton.onClick = { [weak self] in self?.onTogglePL?() }
+        infoButton.onClick = { [weak self] in self?.onToggleINFO?() }
     }
 
     override func layout() {
@@ -286,26 +315,35 @@ class MainPlayerView: NSView {
         volumeSlider.frame = NSRect(x: pad, y: sliderTop - 8, width: halfW, height: 8)
         balanceSlider.frame = NSRect(x: pad + halfW + 4, y: sliderTop - 8, width: halfW, height: 8)
 
+        // Speed slider + label
+        let speedLabelW: CGFloat = 42
+        let speedRow = sliderTop - 12
+        speedLabel.frame = NSRect(x: w - pad - speedLabelW, y: speedRow - 8, width: speedLabelW, height: 8)
+        speedSlider.frame = NSRect(x: pad, y: speedRow - 8, width: w - 2 * pad - speedLabelW - 2, height: 8)
+
         // Transport row
-        let transportTop = sliderTop - 12
+        let transportTop = speedRow - 12
         transportBar.frame = NSRect(x: pad, y: transportTop - 18, width: transportBar.intrinsicContentSize.width, height: 18)
 
-        // Right side: shuffle, repeat, EQ, PL
+        // Right side: shuffle, repeat, EQ, PL, INFO
         let btnH: CGFloat = 16
         let btnW: CGFloat = 20
-        let toggleX = w - pad - (btnW * 4 + 3)
+        let infoBtnW: CGFloat = 24
+        let toggleX = w - pad - (btnW * 4 + 3 + infoBtnW + 1)
         let toggleY = transportTop - btnH - 1
 
         shuffleButton.frame = NSRect(x: toggleX, y: toggleY, width: btnW, height: btnH)
         repeatButton.frame = NSRect(x: toggleX + btnW + 1, y: toggleY, width: btnW, height: btnH)
         eqButton.frame = NSRect(x: toggleX + (btnW + 1) * 2, y: toggleY, width: btnW, height: btnH)
         plButton.frame = NSRect(x: toggleX + (btnW + 1) * 3, y: toggleY, width: btnW, height: btnH)
+        infoButton.frame = NSRect(x: toggleX + (btnW + 1) * 4, y: toggleY, width: infoBtnW, height: btnH)
     }
 
     // MARK: - Binding
     func bindToModels(audioEngine: AudioEngine, playlistManager: PlaylistManager) {
         self.audioEngine = audioEngine
         self.playlistManager = playlistManager
+        titleBar.audioEngine = audioEngine
 
         // Time
         audioEngine.$currentTime
@@ -378,6 +416,20 @@ class MainPlayerView: NSView {
             .sink { [weak self] mode in
                 self?.repeatButton.isActive = mode != .off
                 self?.repeatButton.needsDisplay = true
+            }
+            .store(in: &cancellables)
+
+        // Speed slider
+        speedSlider.value = audioEngine.playbackSpeed
+        speedSlider.onChange = { [weak audioEngine, weak self] value in
+            audioEngine?.setPlaybackSpeed(value)
+            self?.speedLabel.stringValue = String(format: "SPD %.1fx", value)
+        }
+        audioEngine.$playbackSpeed
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] speed in
+                self?.speedSlider.value = speed
+                self?.speedLabel.stringValue = String(format: "SPD %.1fx", speed)
             }
             .store(in: &cancellables)
     }
