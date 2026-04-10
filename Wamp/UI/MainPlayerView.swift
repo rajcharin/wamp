@@ -49,6 +49,9 @@ class MainPlayerView: NSView {
     private let leftPanel = NSView()
     private let rightPanel = NSView()
 
+    // Album artwork (overlays spectrum when available)
+    private let artworkView = NSImageView()
+
     // Play state indicator
     private let playIndicator = NSView()
 
@@ -86,6 +89,12 @@ class MainPlayerView: NSView {
         // Spectrum
         spectrumView.wantsLayer = true
         addSubview(spectrumView)
+
+        // Artwork (shown over spectrum when a track has embedded art)
+        artworkView.imageScaling = .scaleProportionallyUpOrDown
+        artworkView.wantsLayer = true
+        artworkView.isHidden = true
+        addSubview(artworkView)
 
         // Right display panel
         rightPanel.wantsLayer = true
@@ -234,6 +243,7 @@ class MainPlayerView: NSView {
         let specH = displayH - timeH - timeSpecGap - 2
         timeDisplay.frame = NSRect(x: pad + 2, y: contentTop - timeH - 2, width: leftPanelW - 4, height: timeH)
         spectrumView.frame = NSRect(x: pad + 2, y: contentTop - displayH + 2, width: leftPanelW - 4, height: specH)
+        artworkView.frame = spectrumView.frame
 
         // Right panel (black bg)
         rightPanel.frame = NSRect(x: rightPanelX, y: contentTop - displayH, width: rightPanelW, height: displayH)
@@ -361,16 +371,36 @@ class MainPlayerView: NSView {
             lcdDisplay.text = ""
             bitrateLabel.stringValue = ""
             sampleRateLabel.stringValue = ""
+            artworkView.image = nil
+            artworkView.isHidden = true
+            spectrumView.isHidden = false
             return
         }
         let index = (playlistManager?.currentIndex ?? 0) + 1
-        lcdDisplay.text = "\(index). \(track.displayTitle) (\(track.formattedDuration))"
+        var lcdText = "\(index). \(track.displayTitle) (\(track.formattedDuration))"
+        if track.year > 0 { lcdText += " [\(track.year)]" }
+        lcdDisplay.text = lcdText
         bitrateLabel.stringValue = "\(track.bitrate > 0 ? "\(track.bitrate)" : "---")"
         bitrateLabel.textColor = WinampTheme.greenBright
         sampleRateLabel.stringValue = "\(track.sampleRate > 0 ? "\(track.sampleRate / 1000)" : "--")"
         sampleRateLabel.textColor = WinampTheme.greenBright
         stereoLabel.textColor = track.isStereo ? WinampTheme.greenBright : WinampTheme.greenDimText
         monoLabel.textColor = track.isStereo ? WinampTheme.greenDimText : WinampTheme.greenBright
+
+        // Load artwork async — hide spectrum when art is available
+        artworkView.image = nil
+        artworkView.isHidden = true
+        spectrumView.isHidden = false
+        Task { [weak self] in
+            guard let self else { return }
+            let image = await Track.loadArtwork(from: track.url)
+            await MainActor.run {
+                guard self.playlistManager?.currentTrack?.id == track.id else { return }
+                self.artworkView.image = image
+                self.artworkView.isHidden = (image == nil)
+                self.spectrumView.isHidden = (image != nil)
+            }
+        }
     }
 
     private func showOpenFilePanel() {
