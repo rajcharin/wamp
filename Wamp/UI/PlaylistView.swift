@@ -187,6 +187,11 @@ class PlaylistView: NSView {
                 }
             }
             .store(in: &cancellables)
+
+        playlistManager.$upNextQueue
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.tableView.reloadData() }
+            .store(in: &cancellables)
     }
 
     private func updateInfoLabel() {
@@ -233,6 +238,16 @@ class PlaylistView: NSView {
         folderItem.target = self
         menu.addItem(fileItem)
         menu.addItem(folderItem)
+        menu.addItem(.separator())
+        let importItem = NSMenuItem(title: "Import Playlist...", action: #selector(importPlaylist), keyEquivalent: "")
+        importItem.target = self
+        menu.addItem(importItem)
+        let exportM3UItem = NSMenuItem(title: "Export as M3U...", action: #selector(exportM3U), keyEquivalent: "")
+        exportM3UItem.target = self
+        menu.addItem(exportM3UItem)
+        let exportPLSItem = NSMenuItem(title: "Export as PLS...", action: #selector(exportPLS), keyEquivalent: "")
+        exportPLSItem.target = self
+        menu.addItem(exportPLSItem)
         menu.popUp(positioning: nil, at: NSPoint(x: addButton.frame.minX, y: addButton.frame.maxY), in: self)
     }
 
@@ -301,6 +316,50 @@ class PlaylistView: NSView {
         }
     }
 
+    @objc private func importPlaylist() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "m3u") ?? .plainText,
+            UTType(filenameExtension: "m3u8") ?? .plainText,
+            UTType(filenameExtension: "pls") ?? .plainText
+        ]
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                if url.pathExtension.lowercased() == "pls" {
+                    await self?.playlistManager?.importPLS(from: url)
+                } else {
+                    await self?.playlistManager?.importM3U(from: url)
+                }
+            }
+        }
+    }
+
+    @objc private func exportM3U() {
+        guard let pm = playlistManager, !pm.tracks.isEmpty else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "m3u") ?? .plainText]
+        panel.nameFieldStringValue = "playlist.m3u"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            pm.exportM3U(to: url)
+        }
+    }
+
+    @objc private func exportPLS() {
+        guard let pm = playlistManager, !pm.tracks.isEmpty else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "pls") ?? .plainText]
+        panel.nameFieldStringValue = "playlist.pls"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            pm.exportPLS(to: url)
+        }
+    }
+
     // MARK: - Drag and Drop
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         return .copy
@@ -352,6 +411,10 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         guard row < tracks.count else { return nil }
         let track = tracks[row]
         let isPlaying = playlistManager?.currentTrack?.id == track.id
+        let fileExists = FileManager.default.fileExists(atPath: track.url.path)
+        let queuePos = playlistManager.flatMap { pm in
+            pm.upNextQueue.firstIndex(of: track.id).map { $0 + 1 }
+        }
 
         let rowH: CGFloat = 18
         let cellW = tableColumn?.width ?? 200
@@ -366,7 +429,7 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         let numStr = "\(row + 1)."
         let numLabel = NSTextField(labelWithString: numStr)
         numLabel.font = font
-        numLabel.textColor = isPlaying ? WinampTheme.white : WinampTheme.greenSecondary
+        numLabel.textColor = !fileExists ? WinampTheme.errorColor : isPlaying ? WinampTheme.white : WinampTheme.greenSecondary
         numLabel.isBezeled = false
         numLabel.drawsBackground = false
         numLabel.sizeToFit()
@@ -374,10 +437,12 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         numLabel.frame = NSRect(x: -10, y: yOffset, width: numWidth, height: textH)
         cell.addSubview(numLabel)
 
-        // Duration
-        let durLabel = NSTextField(labelWithString: track.formattedDuration)
+        // Duration + optional queue badge
+        var durText = track.formattedDuration
+        if let pos = queuePos { durText = "[\(pos)] \(durText)" }
+        let durLabel = NSTextField(labelWithString: durText)
         durLabel.font = font
-        durLabel.textColor = isPlaying ? WinampTheme.white : WinampTheme.greenSecondary
+        durLabel.textColor = queuePos != nil ? WinampTheme.greenBright : isPlaying ? WinampTheme.white : WinampTheme.greenSecondary
         durLabel.isBezeled = false
         durLabel.drawsBackground = false
         durLabel.sizeToFit()
@@ -390,7 +455,7 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         let nameX = numWidth - 10 + 4
         let nameLabel = NSTextField(labelWithString: track.displayTitle)
         nameLabel.font = font
-        nameLabel.textColor = isPlaying ? WinampTheme.white : WinampTheme.greenBright
+        nameLabel.textColor = !fileExists ? WinampTheme.errorColor : isPlaying ? WinampTheme.white : WinampTheme.greenBright
         nameLabel.isBezeled = false
         nameLabel.drawsBackground = false
         nameLabel.lineBreakMode = .byTruncatingTail
@@ -523,6 +588,17 @@ extension PlaylistView: NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // Queue / Up Next
+        if count == 1, let track = selectedTracks.first {
+            let inQueue = playlistManager?.upNextQueue.contains(track.id) == true
+            let queueTitle = inQueue ? "Remove from Queue" : "Add to Queue"
+            let queueItem = NSMenuItem(title: queueTitle, action: #selector(toggleQueue), keyEquivalent: "")
+            queueItem.target = self
+            menu.addItem(queueItem)
+        }
+
+        menu.addItem(.separator())
+
         let removeItem = NSMenuItem(title: "Remove from Playlist\(countSuffix)", action: #selector(removeClickedRows), keyEquivalent: "")
         removeItem.target = self
         menu.addItem(removeItem)
@@ -542,6 +618,19 @@ extension PlaylistView: NSMenuDelegate {
             .joined(separator: "\n")
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(paths, forType: .string)
+    }
+
+    @objc private func toggleQueue() {
+        let tracks = displayedTracks
+        let clickedRow = tableView.clickedRow
+        guard clickedRow >= 0, clickedRow < tracks.count else { return }
+        let track = tracks[clickedRow]
+        guard let pm = playlistManager else { return }
+        if let idx = pm.upNextQueue.firstIndex(of: track.id) {
+            pm.removeFromQueue(at: idx)
+        } else {
+            pm.addToQueue(track.id)
+        }
     }
 
     @objc private func removeClickedRows() {
