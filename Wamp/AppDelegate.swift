@@ -27,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Restore state
         let appState = stateManager.loadAppState()
+        ThemeManager.shared.apply(named: appState.themeName)
         audioEngine.volume = appState.volume
         audioEngine.balance = appState.balance
         audioEngine.repeatMode = RepeatMode(rawValue: appState.repeatMode) ?? .off

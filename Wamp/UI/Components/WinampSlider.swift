@@ -25,9 +25,15 @@ class WinampSlider: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() { needsDisplay = true }
 
     convenience init(style: WinampSliderStyle, isVertical: Bool = false) {
         self.init(frame: .zero)

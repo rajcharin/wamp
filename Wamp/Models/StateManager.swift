@@ -13,6 +13,7 @@ struct AppState: Codable {
     var alwaysOnTop: Bool = true
     var lastTrackIndex: Int = -1
     var lastPlaybackPosition: Double = 0
+    var themeName: String = "Classic"
 }
 
 struct EQState: Codable {
@@ -66,6 +67,7 @@ class StateManager {
         state.eqEnabled = audioEngine.eqEnabled
         state.lastTrackIndex = playlistManager.currentIndex
         state.lastPlaybackPosition = audioEngine.currentTime
+        state.themeName = ThemeManager.shared.current.name
         write(state, to: "state.json")
     }
 
@@ -94,10 +96,10 @@ class StateManager {
         state.volume = audioEngine.volume
         state.balance = audioEngine.balance
         state.repeatMode = audioEngine.repeatMode.rawValue
-
         state.eqEnabled = audioEngine.eqEnabled
         state.lastTrackIndex = playlistManager.currentIndex
         state.lastPlaybackPosition = audioEngine.currentTime
+        state.themeName = ThemeManager.shared.current.name
         write(state, to: "state.json")
     }
 

@@ -13,9 +13,15 @@ class LCDDisplay: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
         startScrolling()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() { needsDisplay = true }
 
     private func startScrolling() {
         scrollTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in

@@ -3,10 +3,23 @@ import Cocoa
 class TitleBarView: NSView {
     var titleText: String = "WAMP" { didSet { needsDisplay = true } }
     var showButtons: Bool = true
+    var showThemeButton: Bool = false
     var onClose: (() -> Void)?
     var onMinimize: (() -> Void)?
     var onTogglePin: (() -> Void)?
     var isPinned: Bool = true { didSet { needsDisplay = true } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() { needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -16,7 +29,7 @@ class TitleBarView: NSView {
         let gradient = NSGradient(colors: [
             WinampTheme.titleBarTop,
             WinampTheme.titleBarBottom,
-            NSColor(hex: 0x3A4460),
+            WinampTheme.titleBarGradientMid,
             WinampTheme.titleBarBottom
         ])
         gradient?.draw(in: b, angle: 90)
@@ -34,24 +47,17 @@ class TitleBarView: NSView {
         let stripeMargin: CGFloat = 4
         let stripeGap: CGFloat = 4
 
-        // Left stripes
-        drawStripes(in: NSRect(
-            x: stripeMargin,
-            y: (b.height - 8) / 2,
-            width: textX - stripeGap - stripeMargin,
-            height: 8
-        ))
+        let leftEnd = textX - stripeGap - stripeMargin
+        if leftEnd > stripeMargin {
+            drawStripes(in: NSRect(x: stripeMargin, y: (b.height - 8) / 2, width: leftEnd, height: 8))
+        }
 
-        // Right stripes
         let rightStart = textX + textSize.width + stripeGap
-        let rightEnd = showButtons ? b.width - 41 : b.width - stripeMargin
+        var rightEnd = b.width - stripeMargin
+        if showButtons { rightEnd -= 41 }
+        if showThemeButton { rightEnd -= 38 }
         if rightEnd > rightStart {
-            drawStripes(in: NSRect(
-                x: rightStart,
-                y: (b.height - 8) / 2,
-                width: rightEnd - rightStart,
-                height: 8
-            ))
+            drawStripes(in: NSRect(x: rightStart, y: (b.height - 8) / 2, width: rightEnd - rightStart, height: 8))
         }
 
         // Title text
@@ -74,6 +80,12 @@ class TitleBarView: NSView {
                 NSRect(x: b.width - 11, y: btnY, width: btnSize, height: btnSize),
                 symbol: "×"
             )
+        }
+
+        // Theme button
+        if showThemeButton {
+            let btnX = showButtons ? b.width - 33 - 38 : b.width - 38
+            drawThemeButton(NSRect(x: btnX, y: 2, width: 34, height: b.height - 4))
         }
 
         // Bottom border
@@ -99,10 +111,9 @@ class TitleBarView: NSView {
     }
 
     private func drawWindowButton(_ rect: NSRect, symbol: String) {
-        NSColor(hex: 0x3A4060).setFill()
+        WinampTheme.titleBarButtonFace.setFill()
         rect.fill()
 
-        // 3D border
         WinampTheme.buttonBorderLight.setStroke()
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.minY))
@@ -120,8 +131,8 @@ class TitleBarView: NSView {
         path2.stroke()
 
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 6),
-            .foregroundColor: NSColor(hex: 0xA0A8C0)
+            .font: WinampTheme.smallLabelFont,
+            .foregroundColor: WinampTheme.titleBarButtonText
         ]
         let size = symbol.size(withAttributes: attrs)
         symbol.draw(
@@ -131,10 +142,9 @@ class TitleBarView: NSView {
     }
 
     private func drawPinButton(_ rect: NSRect, pinned: Bool) {
-        NSColor(hex: 0x3A4060).setFill()
+        WinampTheme.titleBarButtonFace.setFill()
         rect.fill()
 
-        // 3D border
         WinampTheme.buttonBorderLight.setStroke()
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.minY))
@@ -151,15 +161,13 @@ class TitleBarView: NSView {
         path2.lineWidth = 1
         path2.stroke()
 
-        // Draw pin icon: a small diamond/dot when pinned, hollow when not
-        let color = pinned ? WinampTheme.greenBright : NSColor(hex: 0xA0A8C0)
+        let color = pinned ? WinampTheme.greenBright : WinampTheme.titleBarButtonText
         color.setStroke()
         color.setFill()
         let pinPath = NSBezierPath()
         pinPath.lineWidth = 1.0
         let cx = rect.midX
         let cy = rect.midY
-        // Draw a pushpin shape: vertical line with a circle on top
         pinPath.move(to: NSPoint(x: cx, y: cy - 3))
         pinPath.line(to: NSPoint(x: cx, y: cy + 1))
         pinPath.stroke()
@@ -174,6 +182,38 @@ class TitleBarView: NSView {
         }
     }
 
+    private func drawThemeButton(_ rect: NSRect) {
+        WinampTheme.titleBarButtonFace.setFill()
+        rect.fill()
+
+        WinampTheme.buttonBorderLight.setStroke()
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.minY))
+        path.line(to: NSPoint(x: rect.minX, y: rect.maxY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.maxY))
+        path.lineWidth = 1
+        path.stroke()
+
+        WinampTheme.buttonBorderDark.setStroke()
+        let path2 = NSBezierPath()
+        path2.move(to: NSPoint(x: rect.maxX, y: rect.maxY))
+        path2.line(to: NSPoint(x: rect.maxX, y: rect.minY))
+        path2.line(to: NSPoint(x: rect.minX, y: rect.minY))
+        path2.lineWidth = 1
+        path2.stroke()
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: WinampTheme.smallLabelFont,
+            .foregroundColor: WinampTheme.titleBarButtonText
+        ]
+        let label = "THEME"
+        let size = label.size(withAttributes: attrs)
+        label.draw(
+            at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+            withAttributes: attrs
+        )
+    }
+
     // MARK: - Window dragging
     private var dragOrigin: NSPoint?
 
@@ -186,7 +226,13 @@ class TitleBarView: NSView {
         let minimizeRect = NSRect(x: b.width - 22, y: btnY, width: btnSize, height: btnSize)
         let closeRect = NSRect(x: b.width - 11, y: btnY, width: btnSize, height: btnSize)
 
+        let themeRect = themeButtonRect()
+
         if showButtons && (closeRect.contains(point) || minimizeRect.contains(point) || pinRect.contains(point)) {
+            super.mouseDown(with: event)
+            return
+        }
+        if showThemeButton && themeRect.contains(point) {
             super.mouseDown(with: event)
             return
         }
@@ -204,25 +250,48 @@ class TitleBarView: NSView {
         win.setFrameOrigin(frame.origin)
     }
 
-    // MARK: - Click handling for window buttons
     override func mouseUp(with event: NSEvent) {
         dragOrigin = nil
-        guard showButtons else { return }
         let point = convert(event.locationInWindow, from: nil)
         let b = bounds
         let btnSize: CGFloat = 9
         let btnY = (b.height - btnSize) / 2
 
-        let pinRect = NSRect(x: b.width - 33, y: btnY, width: btnSize, height: btnSize)
-        let minimizeRect = NSRect(x: b.width - 22, y: btnY, width: btnSize, height: btnSize)
-        let closeRect = NSRect(x: b.width - 11, y: btnY, width: btnSize, height: btnSize)
-
-        if closeRect.contains(point) {
-            onClose?()
-        } else if minimizeRect.contains(point) {
-            onMinimize?()
-        } else if pinRect.contains(point) {
-            onTogglePin?()
+        if showButtons {
+            let pinRect = NSRect(x: b.width - 33, y: btnY, width: btnSize, height: btnSize)
+            let minimizeRect = NSRect(x: b.width - 22, y: btnY, width: btnSize, height: btnSize)
+            let closeRect = NSRect(x: b.width - 11, y: btnY, width: btnSize, height: btnSize)
+            if closeRect.contains(point) { onClose?(); return }
+            if minimizeRect.contains(point) { onMinimize?(); return }
+            if pinRect.contains(point) { onTogglePin?(); return }
         }
+
+        if showThemeButton && themeButtonRect().contains(point) {
+            showThemeMenu()
+        }
+    }
+
+    private func themeButtonRect() -> NSRect {
+        let b = bounds
+        let btnX = showButtons ? b.width - 33 - 38 : b.width - 38
+        return NSRect(x: btnX, y: 2, width: 34, height: b.height - 4)
+    }
+
+    private func showThemeMenu() {
+        let menu = NSMenu()
+        for theme in ThemeManager.shared.allThemes {
+            let item = NSMenuItem(title: theme.name, action: #selector(selectTheme(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = theme.name
+            item.state = ThemeManager.shared.current.name == theme.name ? .on : .off
+            menu.addItem(item)
+        }
+        let rect = themeButtonRect()
+        menu.popUp(positioning: nil, at: NSPoint(x: rect.minX, y: rect.minY), in: self)
+    }
+
+    @objc private func selectTheme(_ item: NSMenuItem) {
+        guard let name = item.representedObject as? String else { return }
+        ThemeManager.shared.apply(named: name)
     }
 }

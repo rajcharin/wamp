@@ -64,14 +64,30 @@ class MainPlayerView: NSView {
         wantsLayer = true
         layer?.backgroundColor = WinampTheme.frameBackground.cgColor
         setupSubviews()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() {
+        layer?.backgroundColor = WinampTheme.frameBackground.cgColor
+        leftPanel.layer?.backgroundColor = WinampTheme.panelBackground.cgColor
+        rightPanel.layer?.backgroundColor = WinampTheme.panelBackground.cgColor
+        for label in [bitrateLabel, sampleRateLabel, bitrateUnitLabel, sampleRateUnitLabel, monoLabel, stereoLabel] {
+            label.textColor = WinampTheme.greenDimText
+        }
+        needsDisplay = true
+        subviews.forEach { $0.needsDisplay = true }
+    }
 
     private func setupSubviews() {
         // Title bar
         titleBar.titleText = "WAMP"
         titleBar.showButtons = true
+        titleBar.showThemeButton = true
         titleBar.onClose = { NSApp.terminate(nil) }
         titleBar.onMinimize = { [weak self] in self?.window?.miniaturize(nil) }
         titleBar.onTogglePin = { [weak self] in self?.onTogglePin?() }
@@ -79,7 +95,7 @@ class MainPlayerView: NSView {
 
         // Left display panel background
         leftPanel.wantsLayer = true
-        leftPanel.layer?.backgroundColor = NSColor.black.cgColor
+        leftPanel.layer?.backgroundColor = WinampTheme.panelBackground.cgColor
         addSubview(leftPanel)
 
         // Time display
@@ -98,7 +114,7 @@ class MainPlayerView: NSView {
 
         // Right display panel
         rightPanel.wantsLayer = true
-        rightPanel.layer?.backgroundColor = NSColor.black.cgColor
+        rightPanel.layer?.backgroundColor = WinampTheme.panelBackground.cgColor
         addSubview(rightPanel)
 
         // LCD (track title)
