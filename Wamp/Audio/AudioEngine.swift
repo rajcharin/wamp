@@ -36,6 +36,9 @@ class AudioEngine: ObservableObject {
     @Published var playbackSpeed: Float = 1.0
     @Published var sleepTimerRemaining: TimeInterval? = nil
     @Published var currentOutputDeviceID: AudioDeviceID = 0
+    @Published var loopA: TimeInterval? = nil
+    @Published var loopB: TimeInterval? = nil
+    @Published var isMono: Bool = false
 
     // MARK: - EQ State
     @Published private(set) var eqBands: [Float] = Array(repeating: 0, count: 10) // dB per band
@@ -49,6 +52,7 @@ class AudioEngine: ObservableObject {
     private let playerNode = AVAudioPlayerNode()
     private let eq: AVAudioUnitEQ
     private let timePitch = AVAudioUnitTimePitch()
+    private let monoMixerNode = AVAudioMixerNode()
     private var sleepTimer: Timer?
     private var audioFile: AVAudioFile?
     private var seekFrame: AVAudioFramePosition = 0
@@ -73,10 +77,20 @@ class AudioEngine: ObservableObject {
         engine.attach(playerNode)
         engine.attach(eq)
         engine.attach(timePitch)
+        engine.attach(monoMixerNode)
         engine.connect(playerNode, to: eq, format: nil)
         engine.connect(eq, to: timePitch, format: nil)
-        engine.connect(timePitch, to: engine.mainMixerNode, format: nil)
+        engine.connect(timePitch, to: monoMixerNode, format: nil)
+        engine.connect(monoMixerNode, to: engine.mainMixerNode, format: nil)
         engine.mainMixerNode.outputVolume = effectiveVolume
+    }
+
+    func setMono(_ enabled: Bool) {
+        isMono = enabled
+        let sampleRate = audioSampleRate > 0 ? audioSampleRate : 44100
+        let channelCount: AVAudioChannelCount = enabled ? 1 : 2
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: channelCount) else { return }
+        engine.connect(monoMixerNode, to: engine.mainMixerNode, format: format)
     }
 
     private func setupEQBands() {
@@ -206,6 +220,11 @@ class AudioEngine: ObservableObject {
         }
     }
 
+    // MARK: - A-B Loop
+    func setLoopA() { loopA = currentTime }
+    func setLoopB() { loopB = currentTime }
+    func clearLoop() { loopA = nil; loopB = nil }
+
     // MARK: - Output Device
     func selectOutputDevice(_ deviceID: AudioDeviceID) {
         OutputDeviceManager.setOutputDevice(deviceID, on: engine)
@@ -318,7 +337,11 @@ class AudioEngine: ObservableObject {
         guard isPlaying,
               let nodeTime = playerNode.lastRenderTime,
               let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else { return }
-        currentTime = Double(seekFrame + playerTime.sampleTime) / audioSampleRate
+        let t = Double(seekFrame + playerTime.sampleTime) / audioSampleRate
+        currentTime = t
+        if let a = loopA, let b = loopB, b > a, t >= b {
+            seek(to: a)
+        }
     }
 
     // MARK: - Spectrum Tap
