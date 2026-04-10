@@ -5,6 +5,10 @@ import UniformTypeIdentifiers
 class PlaylistView: NSView {
     private static let internalRowType = NSPasteboard.PasteboardType("com.winampmac.playlist.row")
 
+    private enum SortField { case none, title, artist, album, duration }
+    private var sortField: SortField = .none
+    private var sortAscending = true
+
     private let titleBar = TitleBarView()
     private let scrollView = NSScrollView()
     private let tableView = PlaylistTableView()
@@ -12,6 +16,7 @@ class PlaylistView: NSView {
     private let addButton = WinampButton(title: "ADD", style: .action)
     private let remButton = WinampButton(title: "REM", style: .action)
     private let clrButton = WinampButton(title: "CLR", style: .action)
+    private let sortButton = WinampButton(title: "SORT", style: .action)
     private let infoLabel = NSTextField(labelWithString: "")
 
     private var cancellables = Set<AnyCancellable>()
@@ -43,6 +48,7 @@ class PlaylistView: NSView {
         tableView.backgroundColor = .black
         tableView.rowHeight = 18
         tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.allowsMultipleSelection = true
         tableView.delegate = self
         tableView.dataSource = self
         tableView.doubleAction = #selector(doubleClickRow)
@@ -51,6 +57,11 @@ class PlaylistView: NSView {
         tableView.gridStyleMask = []
         tableView.onEnter = { [weak self] in self?.playSelectedRow() }
         tableView.onDelete = { [weak self] in self?.removeSelected() }
+
+        // Right-click context menu
+        let contextMenu = NSMenu()
+        contextMenu.delegate = self
+        tableView.menu = contextMenu
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
@@ -79,9 +90,11 @@ class PlaylistView: NSView {
         addButton.onClick = { [weak self] in self?.showAddMenu() }
         remButton.onClick = { [weak self] in self?.removeSelected() }
         clrButton.onClick = { [weak self] in self?.playlistManager?.clearPlaylist() }
+        sortButton.onClick = { [weak self] in self?.showSortMenu() }
         addSubview(addButton)
         addSubview(remButton)
         addSubview(clrButton)
+        addSubview(sortButton)
 
         // Info label
         infoLabel.font = WinampTheme.bitrateFont
@@ -111,6 +124,7 @@ class PlaylistView: NSView {
         addButton.frame = NSRect(x: pad, y: 2, width: btnW, height: btnH)
         remButton.frame = NSRect(x: pad + btnW + 1, y: 2, width: btnW, height: btnH)
         clrButton.frame = NSRect(x: pad + (btnW + 1) * 2, y: 2, width: btnW, height: btnH)
+        sortButton.frame = NSRect(x: pad + (btnW + 1) * 3, y: 2, width: btnW, height: btnH)
 
         let infoW: CGFloat = 100
         let infoFont = infoLabel.font ?? NSFont.systemFont(ofSize: 9)
@@ -205,6 +219,44 @@ class PlaylistView: NSView {
         menu.popUp(positioning: nil, at: NSPoint(x: addButton.frame.minX, y: addButton.frame.maxY), in: self)
     }
 
+    private func showSortMenu() {
+        let menu = NSMenu()
+        func item(_ title: String, field: SortField) -> NSMenuItem {
+            let mi = NSMenuItem(title: title, action: #selector(applySort(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.tag = field == .title ? 1 : field == .artist ? 2 : field == .album ? 3 : field == .duration ? 4 : 0
+            let isCurrent = sortField == field
+            mi.state = isCurrent ? (sortAscending ? .on : .mixed) : .off
+            return mi
+        }
+        menu.addItem(item("By Title", field: .title))
+        menu.addItem(item("By Artist", field: .artist))
+        menu.addItem(item("By Album", field: .album))
+        menu.addItem(item("By Duration", field: .duration))
+        menu.addItem(.separator())
+        let clearItem = NSMenuItem(title: "Clear Sort", action: #selector(clearSort), keyEquivalent: "")
+        clearItem.target = self
+        clearItem.isEnabled = sortField != .none
+        menu.addItem(clearItem)
+        menu.popUp(positioning: nil, at: NSPoint(x: sortButton.frame.minX, y: sortButton.frame.maxY), in: self)
+    }
+
+    @objc private func applySort(_ sender: NSMenuItem) {
+        let field: SortField = sender.tag == 1 ? .title : sender.tag == 2 ? .artist : sender.tag == 3 ? .album : .duration
+        if sortField == field {
+            sortAscending.toggle()
+        } else {
+            sortField = field
+            sortAscending = true
+        }
+        tableView.reloadData()
+    }
+
+    @objc private func clearSort() {
+        sortField = .none
+        tableView.reloadData()
+    }
+
     @objc private func addFiles() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -259,7 +311,19 @@ class PlaylistView: NSView {
 // MARK: - NSTableViewDataSource / Delegate
 extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
     private var displayedTracks: [Track] {
-        playlistManager?.filteredTracks ?? []
+        let base = playlistManager?.filteredTracks ?? []
+        guard sortField != .none else { return base }
+        return base.sorted { a, b in
+            let ascending: Bool
+            switch sortField {
+            case .title:    ascending = a.title.localizedStandardCompare(b.title) == .orderedAscending
+            case .artist:   ascending = a.artist.localizedStandardCompare(b.artist) == .orderedAscending
+            case .album:    ascending = a.album.localizedStandardCompare(b.album) == .orderedAscending
+            case .duration: ascending = a.duration < b.duration
+            case .none:     ascending = true
+            }
+            return sortAscending ? ascending : !ascending
+        }
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -409,6 +473,69 @@ class WinampRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
         NSColor.black.setFill()
         bounds.fill()
+    }
+}
+
+// MARK: - Right-click Context Menu
+extension PlaylistView: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let clickedRow = tableView.clickedRow
+        guard clickedRow >= 0 else { return }
+
+        // If right-clicking outside current selection, select only the clicked row
+        if !tableView.selectedRowIndexes.contains(clickedRow) {
+            tableView.selectRowIndexes(IndexSet(integer: clickedRow), byExtendingSelection: false)
+        }
+
+        let selectedRows = tableView.selectedRowIndexes
+        let tracks = displayedTracks
+        let selectedTracks = selectedRows.compactMap { $0 < tracks.count ? tracks[$0] : nil }
+        let count = selectedTracks.count
+        let countSuffix = count > 1 ? " (\(count))" : ""
+
+        if count == 1, let track = selectedTracks.first {
+            let showItem = NSMenuItem(title: "Show in Finder", action: #selector(showInFinder), keyEquivalent: "")
+            showItem.target = self
+            menu.addItem(showItem)
+        }
+
+        let copyItem = NSMenuItem(title: "Copy File Path\(countSuffix)", action: #selector(copyFilePaths), keyEquivalent: "")
+        copyItem.target = self
+        menu.addItem(copyItem)
+
+        menu.addItem(.separator())
+
+        let removeItem = NSMenuItem(title: "Remove from Playlist\(countSuffix)", action: #selector(removeClickedRows), keyEquivalent: "")
+        removeItem.target = self
+        menu.addItem(removeItem)
+    }
+
+    @objc private func showInFinder() {
+        let tracks = displayedTracks
+        let clickedRow = tableView.clickedRow
+        guard clickedRow >= 0, clickedRow < tracks.count else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([tracks[clickedRow].url])
+    }
+
+    @objc private func copyFilePaths() {
+        let tracks = displayedTracks
+        let paths = tableView.selectedRowIndexes
+            .compactMap { $0 < tracks.count ? tracks[$0].url.path : nil }
+            .joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(paths, forType: .string)
+    }
+
+    @objc private func removeClickedRows() {
+        let tracks = displayedTracks
+        let realIndices = tableView.selectedRowIndexes.compactMap { row -> Int? in
+            guard row < tracks.count else { return nil }
+            return playlistManager?.tracks.firstIndex(where: { $0.id == tracks[row].id })
+        }.sorted().reversed()
+        for index in realIndices {
+            playlistManager?.removeTrack(at: index)
+        }
     }
 }
 
