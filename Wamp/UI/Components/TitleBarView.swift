@@ -387,8 +387,24 @@ class TitleBarView: NSView {
             }
         }
 
+        menu.addItem(.separator())
+
+        // ── Audio ──────────────────────────────────────────
+        let audioHeader = NSMenuItem(title: "Audio", action: nil, keyEquivalent: "")
+        audioHeader.isEnabled = false
+        menu.addItem(audioHeader)
+        let monoItem = NSMenuItem(title: "  Mono Mix", action: #selector(toggleMono), keyEquivalent: "")
+        monoItem.target = self
+        monoItem.state = audioEngine?.isMono == true ? .on : .off
+        menu.addItem(monoItem)
+
         let rect = settingsButtonRect()
         menu.popUp(positioning: nil, at: NSPoint(x: rect.minX, y: rect.minY), in: self)
+    }
+
+    @objc private func toggleMono() {
+        guard let engine = audioEngine else { return }
+        engine.setMono(!engine.isMono)
     }
 
     @objc private func selectTheme(_ item: NSMenuItem) {
