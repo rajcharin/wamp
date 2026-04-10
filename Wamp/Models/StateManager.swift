@@ -15,6 +15,7 @@ struct AppState: Codable {
     var lastPlaybackPosition: Double = 0
     var themeName: String = "Classic"
     var playbackSpeed: Float = 1.0
+    var watchedFolderPath: String? = nil
 }
 
 struct EQState: Codable {
@@ -88,7 +89,7 @@ class StateManager {
         write(trackData, to: "playlist.json")
     }
 
-    func saveWindowState(x: Double, y: Double, showEQ: Bool, showPlaylist: Bool, alwaysOnTop: Bool, audioEngine: AudioEngine, playlistManager: PlaylistManager) {
+    func saveWindowState(x: Double, y: Double, showEQ: Bool, showPlaylist: Bool, alwaysOnTop: Bool, audioEngine: AudioEngine, playlistManager: PlaylistManager, watchedFolderPath: String? = nil) {
         var state = loadAppState()
         state.windowX = x
         state.windowY = y
@@ -103,6 +104,7 @@ class StateManager {
         state.lastPlaybackPosition = audioEngine.currentTime
         state.themeName = ThemeManager.shared.current.name
         state.playbackSpeed = audioEngine.playbackSpeed
+        state.watchedFolderPath = watchedFolderPath
         write(state, to: "state.json")
     }
 

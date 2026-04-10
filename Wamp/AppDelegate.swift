@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var mainWindow: MainWindow!
     var statusItem: NSStatusItem!
     var hotKeyManager: HotKeyManager!
+    var folderWatcher = FolderWatcher()
 
     static func main() {
         let app = NSApplication.shared
@@ -25,6 +26,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         playlistManager.setAudioEngine(audioEngine)
 
+        // Folder watcher callback
+        folderWatcher.onNewFiles = { [weak self] urls in
+            guard let self else { return }
+            Task { await self.playlistManager.addURLs(urls) }
+        }
+
         // Restore state
         let appState = stateManager.loadAppState()
         ThemeManager.shared.apply(named: appState.themeName)
@@ -34,6 +41,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         audioEngine.eqEnabled = appState.eqEnabled
         audioEngine.setPlaybackSpeed(appState.playbackSpeed)
         audioEngine.currentOutputDeviceID = OutputDeviceManager.currentOutputDeviceID()
+
+        // Restore watched folder
+        if let path = appState.watchedFolderPath {
+            folderWatcher.start(watching: URL(fileURLWithPath: path))
+        }
 
 
         let eqState = stateManager.loadEQState()
@@ -94,7 +106,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             showPlaylist: mainWindow.showPlaylist,
             alwaysOnTop: mainWindow.alwaysOnTop,
             audioEngine: audioEngine,
-            playlistManager: playlistManager
+            playlistManager: playlistManager,
+            watchedFolderPath: folderWatcher.watchedURL?.path
         )
         stateManager.saveEQState(audioEngine: audioEngine)
         stateManager.savePlaylist(playlistManager: playlistManager)
@@ -128,6 +141,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openFolder.target = self
         openFolder.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(openFolder)
+        fileMenu.addItem(.separator())
+        let watchFolder = NSMenuItem(title: "Watch Folder...", action: #selector(watchFolderAction), keyEquivalent: "")
+        watchFolder.target = self
+        fileMenu.addItem(watchFolder)
+        let stopWatching = NSMenuItem(title: "Stop Watching Folder", action: #selector(stopWatchingAction), keyEquivalent: "")
+        stopWatching.target = self
+        fileMenu.addItem(stopWatching)
         let fileMenuItem = NSMenuItem()
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
@@ -198,6 +218,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard response == .OK, let url = panel.url else { return }
             Task { await self?.playlistManager.addFolder(url) }
         }
+    }
+
+    @objc private func watchFolderAction() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.message = "Choose a folder to watch for new audio files"
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            self.folderWatcher.start(watching: url)
+        }
+    }
+
+    @objc private func stopWatchingAction() {
+        folderWatcher.stop()
     }
 
     @objc func togglePlayPause() {

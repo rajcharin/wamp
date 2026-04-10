@@ -23,11 +23,12 @@ struct Track: Identifiable, Codable, Equatable {
     var lastPlayed: Date? = nil
     var fileSize: Int64 = 0
     var codec: String = ""
+    var rating: Int = 0 // 0 = unrated, 1–5 stars
 
     // Explicit CodingKeys so artworkImage (NSImage) stays out of JSON
     enum CodingKeys: String, CodingKey {
         case id, url, title, artist, album, duration, genre, bitrate, sampleRate, channels, trackNumber, year
-        case playCount, lastPlayed, fileSize, codec
+        case playCount, lastPlayed, fileSize, codec, rating
     }
 
     init(from decoder: Decoder) throws {
@@ -48,6 +49,7 @@ struct Track: Identifiable, Codable, Equatable {
         lastPlayed = try c.decodeIfPresent(Date.self, forKey: .lastPlayed)
         fileSize = try c.decodeIfPresent(Int64.self, forKey: .fileSize) ?? 0
         codec = try c.decodeIfPresent(String.self, forKey: .codec) ?? ""
+        rating = try c.decodeIfPresent(Int.self, forKey: .rating) ?? 0
     }
 
     init(

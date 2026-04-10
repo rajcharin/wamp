@@ -10,14 +10,14 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 - [x] File info panel — show codec, bitrate, sample rate, channels, file size, play count, last played (INFO button)
 - [ ] Mini player / menu bar mode — compact floating player or menu-bar-only playback control
 - [ ] Lyrics display — read embedded USLT/SYLT tags; show plain or synchronized lyrics
-- [ ] Rating system — 1–5 stars per track, stored in app state; feeds into smart playlists
+- [x] Rating system — 1–5 stars per track, stored in app state; feeds into smart playlists
 - [ ] Keyboard shortcut customization — remap keys to user preference
 
 ---
 
 ## Library & Organisation
 
-- [ ] Watched folder — auto-detect new audio files dropped into a configured folder via FSEvents
+- [x] Watched folder — auto-detect new audio files dropped into a configured folder via FSEvents
 - [ ] Multiple named playlists — sidebar or tab switching between saved playlists
 - [ ] Artist / Album browser panel — hierarchical grouping: artist → album → tracks
 - [x] Play count + last played tracking — persisted in playlist.json per track
@@ -34,7 +34,7 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 - [ ] ReplayGain — read R128 / RG tags and normalize volume per track to prevent level jumps
 - [x] Queue / Up Next — temporary play queue; right-click "Add to Queue", position badge in playlist
 - [x] Sleep timer — ZZZ button in title bar; countdown stops playback; 15/30/45/60 min options
-- [ ] A-B loop — mark a start and end point in a track and loop that segment continuously
+- [x] A-B loop — mark a start and end point in a track and loop that segment continuously
 - [x] Playback speed — 0.5×–2× speed slider in player; persists across launches
 
 ---
@@ -52,7 +52,7 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 ## Audio
 
 - [x] Output device selector — OUT button in title bar; lists all CoreAudio outputs with checkmark
-- [ ] Stereo / mono toggle — collapse stereo channels for single-speaker or accessibility use
+- [x] Stereo / mono toggle — collapse stereo channels for single-speaker or accessibility use
 
 ---
 

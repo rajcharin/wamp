@@ -437,6 +437,20 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         numLabel.frame = NSRect(x: -10, y: yOffset, width: numWidth, height: textH)
         cell.addSubview(numLabel)
 
+        // Star rating badge (right edge, before duration)
+        var starText = ""
+        if track.rating > 0 { starText = String(repeating: "★", count: track.rating) }
+        let starLabel = NSTextField(labelWithString: starText)
+        starLabel.font = NSFont.systemFont(ofSize: 7, weight: .regular)
+        starLabel.textColor = NSColor(red: 1.0, green: 0.85, blue: 0.0, alpha: 0.9)
+        starLabel.isBezeled = false
+        starLabel.drawsBackground = false
+        starLabel.sizeToFit()
+        let starWidth = starLabel.frame.width
+        let rightMargin: CGFloat = 10
+        starLabel.frame = NSRect(x: cellW - starWidth - rightMargin, y: yOffset - 1, width: starWidth, height: textH)
+        if track.rating > 0 { cell.addSubview(starLabel) }
+
         // Duration + optional queue badge
         var durText = track.formattedDuration
         if let pos = queuePos { durText = "[\(pos)] \(durText)" }
@@ -447,8 +461,8 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         durLabel.drawsBackground = false
         durLabel.sizeToFit()
         let durWidth = durLabel.frame.width
-        let rightMargin: CGFloat = 10
-        durLabel.frame = NSRect(x: cellW - durWidth - rightMargin, y: yOffset, width: durWidth, height: textH)
+        let durRightMargin = rightMargin + (track.rating > 0 ? starWidth + 2 : 0)
+        durLabel.frame = NSRect(x: cellW - durWidth - durRightMargin, y: yOffset, width: durWidth, height: textH)
         cell.addSubview(durLabel)
 
         // Track name
@@ -459,7 +473,7 @@ extension PlaylistView: NSTableViewDataSource, NSTableViewDelegate {
         nameLabel.isBezeled = false
         nameLabel.drawsBackground = false
         nameLabel.lineBreakMode = .byTruncatingTail
-        nameLabel.frame = NSRect(x: nameX, y: yOffset, width: cellW - nameX - durWidth - rightMargin - 4, height: textH)
+        nameLabel.frame = NSRect(x: nameX, y: yOffset, width: cellW - nameX - durWidth - durRightMargin - 4, height: textH)
         cell.addSubview(nameLabel)
 
         return cell
@@ -580,6 +594,20 @@ extension PlaylistView: NSMenuDelegate {
             let showItem = NSMenuItem(title: "Show in Finder", action: #selector(showInFinder), keyEquivalent: "")
             showItem.target = self
             menu.addItem(showItem)
+
+            // Rating submenu
+            let ratingMenu = NSMenu()
+            let stars = ["Unrated", "★", "★★", "★★★", "★★★★", "★★★★★"]
+            for (i, label) in stars.enumerated() {
+                let item = NSMenuItem(title: label, action: #selector(setRating(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = i
+                item.state = track.rating == i ? .on : .off
+                ratingMenu.addItem(item)
+            }
+            let ratingItem = NSMenuItem(title: "Set Rating", action: nil, keyEquivalent: "")
+            ratingItem.submenu = ratingMenu
+            menu.addItem(ratingItem)
         }
 
         let copyItem = NSMenuItem(title: "Copy File Path\(countSuffix)", action: #selector(copyFilePaths), keyEquivalent: "")
@@ -618,6 +646,16 @@ extension PlaylistView: NSMenuDelegate {
             .joined(separator: "\n")
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(paths, forType: .string)
+    }
+
+    @objc private func setRating(_ sender: NSMenuItem) {
+        let tracks = displayedTracks
+        let clickedRow = tableView.clickedRow
+        guard clickedRow >= 0, clickedRow < tracks.count else { return }
+        let track = tracks[clickedRow]
+        guard let idx = playlistManager?.tracks.firstIndex(where: { $0.id == track.id }) else { return }
+        playlistManager?.tracks[idx].rating = sender.tag
+        tableView.reloadData(forRowIndexes: IndexSet(integer: clickedRow), columnIndexes: IndexSet(integer: 0))
     }
 
     @objc private func toggleQueue() {

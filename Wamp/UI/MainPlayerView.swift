@@ -393,12 +393,40 @@ class MainPlayerView: NSView {
             }
             .store(in: &cancellables)
 
-        // Seek bar right-click → speed preset menu
-        seekSlider.onRightClick = { [weak self] in self?.showSpeedMenu() }
+        // Seek bar right-click → context menu with A-B loop + speed
+        seekSlider.onRightClick = { [weak self] in self?.showSeekContextMenu() }
     }
 
-    private func showSpeedMenu() {
+    private func showSeekContextMenu() {
         let menu = NSMenu()
+
+        // A-B Loop section
+        let loopHeader = NSMenuItem(title: "A-B Loop", action: nil, keyEquivalent: "")
+        loopHeader.isEnabled = false
+        menu.addItem(loopHeader)
+
+        let aLabel = audioEngine?.loopA.map { String(format: "Set A (current: %.1fs)", $0) } ?? "Set A"
+        let setA = NSMenuItem(title: aLabel, action: #selector(setLoopA), keyEquivalent: "")
+        setA.target = self
+        menu.addItem(setA)
+
+        let bLabel = audioEngine?.loopB.map { String(format: "Set B (current: %.1fs)", $0) } ?? "Set B"
+        let setB = NSMenuItem(title: bLabel, action: #selector(setLoopB), keyEquivalent: "")
+        setB.target = self
+        menu.addItem(setB)
+
+        let clearLoop = NSMenuItem(title: "Clear Loop", action: #selector(clearLoop), keyEquivalent: "")
+        clearLoop.target = self
+        clearLoop.isEnabled = audioEngine?.loopA != nil || audioEngine?.loopB != nil
+        menu.addItem(clearLoop)
+
+        menu.addItem(.separator())
+
+        // Speed section
+        let speedHeader = NSMenuItem(title: "Playback Speed", action: nil, keyEquivalent: "")
+        speedHeader.isEnabled = false
+        menu.addItem(speedHeader)
+
         let speeds: [(String, Float)] = [
             ("0.5×  (half speed)", 0.5),
             ("0.75×", 0.75),
@@ -419,6 +447,10 @@ class MainPlayerView: NSView {
                    at: NSPoint(x: seekSlider.frame.minX, y: seekSlider.frame.minY),
                    in: self)
     }
+
+    @objc private func setLoopA() { audioEngine?.setLoopA() }
+    @objc private func setLoopB() { audioEngine?.setLoopB() }
+    @objc private func clearLoop() { audioEngine?.clearLoop() }
 
     @objc private func applySpeed(_ item: NSMenuItem) {
         guard let rate = item.representedObject as? Float else { return }
