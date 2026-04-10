@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AppKit
 
 struct Track: Identifiable, Codable, Equatable {
     nonisolated static let supportedExtensions: Set<String> = [
@@ -16,6 +17,29 @@ struct Track: Identifiable, Codable, Equatable {
     var bitrate: Int
     var sampleRate: Int
     var channels: Int
+    var trackNumber: Int
+    var year: Int
+
+    // Explicit CodingKeys so artworkImage (NSImage) stays out of JSON
+    enum CodingKeys: String, CodingKey {
+        case id, url, title, artist, album, duration, genre, bitrate, sampleRate, channels, trackNumber, year
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        url = try c.decode(URL.self, forKey: .url)
+        title = try c.decode(String.self, forKey: .title)
+        artist = try c.decode(String.self, forKey: .artist)
+        album = try c.decode(String.self, forKey: .album)
+        duration = try c.decode(TimeInterval.self, forKey: .duration)
+        genre = try c.decode(String.self, forKey: .genre)
+        bitrate = try c.decode(Int.self, forKey: .bitrate)
+        sampleRate = try c.decode(Int.self, forKey: .sampleRate)
+        channels = try c.decode(Int.self, forKey: .channels)
+        trackNumber = try c.decodeIfPresent(Int.self, forKey: .trackNumber) ?? 0
+        year = try c.decodeIfPresent(Int.self, forKey: .year) ?? 0
+    }
 
     init(
         url: URL,
@@ -26,7 +50,9 @@ struct Track: Identifiable, Codable, Equatable {
         genre: String = "",
         bitrate: Int = 0,
         sampleRate: Int = 0,
-        channels: Int = 2
+        channels: Int = 2,
+        trackNumber: Int = 0,
+        year: Int = 0
     ) {
         self.id = UUID()
         self.url = url
@@ -38,6 +64,8 @@ struct Track: Identifiable, Codable, Equatable {
         self.bitrate = bitrate
         self.sampleRate = sampleRate
         self.channels = channels
+        self.trackNumber = trackNumber
+        self.year = year
     }
 
     var displayTitle: String {
@@ -57,6 +85,54 @@ struct Track: Identifiable, Codable, Equatable {
     var isStereo: Bool { channels >= 2 }
 
     @MainActor
+    static func loadArtwork(from url: URL) async -> NSImage? {
+        let asset = AVURLAsset(url: url)
+        guard let metadata = try? await asset.load(.commonMetadata) else { return nil }
+        for item in metadata {
+            guard item.commonKey == .commonKeyArtwork else { continue }
+            if let data = try? await item.load(.dataValue) {
+                return NSImage(data: data)
+            }
+        }
+        return nil
+    }
+
+    private static func looksLikeMojibake(_ text: String) -> Bool {
+        let nonASCII = text.unicodeScalars.filter { $0.value > 0x7F }
+        guard !nonASCII.isEmpty else { return false }
+        return nonASCII.allSatisfy { $0.value <= 0x00FF }
+    }
+
+    private static let candidateEncodings: [String.Encoding] = {
+        func enc(_ windowsCodepage: UInt32) -> String.Encoding? {
+            let cfEnc = CFStringConvertWindowsCodepageToEncoding(windowsCodepage)
+            guard cfEnc != kCFStringEncodingInvalidId else { return nil }
+            let nsEnc = CFStringConvertEncodingToNSStringEncoding(cfEnc)
+            guard nsEnc != UInt(kCFStringEncodingInvalidId) else { return nil }
+            return String.Encoding(rawValue: nsEnc)
+        }
+        return [
+            .utf8,
+            enc(874),   // Thai (Windows-874 / TIS-620)
+            .shiftJIS,  // Japanese (CP932)
+            enc(936),   // Chinese Simplified (GBK)
+            enc(950),   // Chinese Traditional (Big5)
+        ].compactMap { $0 }
+    }()
+
+    private static func fixEncoding(_ text: String) -> String {
+        guard looksLikeMojibake(text) else { return text }
+        guard let rawBytes = text.data(using: .isoLatin1) else { return text }
+        for encoding in candidateEncodings {
+            if let decoded = String(data: rawBytes, encoding: encoding),
+               decoded.unicodeScalars.contains(where: { $0.value > 0x00FF }) {
+                return decoded
+            }
+        }
+        return text
+    }
+
+    @MainActor
     static func fromURL(_ url: URL) async -> Track {
         let asset = AVURLAsset(url: url)
         var title = url.deletingPathExtension().lastPathComponent
@@ -67,6 +143,8 @@ struct Track: Identifiable, Codable, Equatable {
         var bitrate = 0
         var sampleRate = 0
         var channels = 2
+        var trackNumber = 0
+        var year = 0
 
         do {
             let metadata = try await asset.load(.commonMetadata)
@@ -78,22 +156,35 @@ struct Track: Identifiable, Codable, Equatable {
                 switch key {
                 case .commonKeyTitle:
                     if let val = try await item.load(.stringValue), !val.isEmpty {
-                        title = val
+                        title = fixEncoding(val)
                     }
                 case .commonKeyArtist:
                     if let val = try await item.load(.stringValue), !val.isEmpty {
-                        artist = val
+                        artist = fixEncoding(val)
                     }
                 case .commonKeyAlbumName:
                     if let val = try await item.load(.stringValue), !val.isEmpty {
-                        album = val
+                        album = fixEncoding(val)
                     }
                 case .commonKeyType:
                     if let val = try await item.load(.stringValue), !val.isEmpty {
-                        genre = val
+                        genre = fixEncoding(val)
+                    }
+                case .commonKeyCreationDate:
+                    if let val = try await item.load(.stringValue), !val.isEmpty {
+                        year = Int(String(fixEncoding(val).prefix(4))) ?? 0
                     }
                 default:
                     break
+                }
+            }
+
+            // Extract track number from ID3 TRCK (not in common keys)
+            let allMeta = (try? await asset.load(.metadata)) ?? []
+            for item in allMeta where trackNumber == 0 {
+                guard item.keySpace == .id3, (item.key as? String) == "TRCK" else { continue }
+                if let val = try? await item.load(.stringValue), !val.isEmpty {
+                    trackNumber = Int(val.components(separatedBy: "/").first?.trimmingCharacters(in: .whitespaces) ?? "") ?? 0
                 }
             }
 
@@ -122,7 +213,9 @@ struct Track: Identifiable, Codable, Equatable {
             genre: genre,
             bitrate: bitrate,
             sampleRate: sampleRate,
-            channels: channels
+            channels: channels,
+            trackNumber: trackNumber,
+            year: year
         )
     }
 }

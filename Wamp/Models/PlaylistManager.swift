@@ -16,10 +16,9 @@ class PlaylistManager: ObservableObject {
 
     var filteredTracks: [Track] {
         guard !searchQuery.isEmpty else { return tracks }
-        let query = searchQuery.lowercased()
         return tracks.filter {
-            $0.title.lowercased().contains(query) ||
-            $0.artist.lowercased().contains(query)
+            $0.title.localizedCaseInsensitiveContains(searchQuery) ||
+            $0.artist.localizedCaseInsensitiveContains(searchQuery)
         }
     }
 
@@ -188,7 +187,7 @@ class PlaylistManager: ObservableObject {
     // MARK: - Saved Playlists
     func savePlaylist(name: String, to directory: URL) {
         let fileURL = directory.appendingPathComponent("\(name).json")
-        let urls = tracks.map { $0.url.path }
+        let urls = tracks.map { $0.url.absoluteString }
         if let data = try? JSONEncoder().encode(urls) {
             try? data.write(to: fileURL)
         }
@@ -198,7 +197,10 @@ class PlaylistManager: ObservableObject {
         guard let data = try? Data(contentsOf: fileURL),
               let paths = try? JSONDecoder().decode([String].self, from: data) else { return }
         clearPlaylist()
-        let urls = paths.map { URL(fileURLWithPath: $0) }
+        let urls = paths.compactMap { path -> URL? in
+            if let url = URL(string: path), url.scheme == "file" { return url }
+            return URL(fileURLWithPath: path)
+        }
         await addURLs(urls)
     }
 
