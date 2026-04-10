@@ -33,6 +33,9 @@ class AudioEngine: ObservableObject {
     }
     @Published var preampGain: Float = 0 // dB, -12 to +12
     @Published var spectrumData: [Float] = Array(repeating: 0, count: 32)
+    @Published var playbackSpeed: Float = 1.0
+    @Published var sleepTimerRemaining: TimeInterval? = nil
+    @Published var currentOutputDeviceID: AudioDeviceID = 0
 
     // MARK: - EQ State
     @Published private(set) var eqBands: [Float] = Array(repeating: 0, count: 10) // dB per band
@@ -45,6 +48,8 @@ class AudioEngine: ObservableObject {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let eq: AVAudioUnitEQ
+    private let timePitch = AVAudioUnitTimePitch()
+    private var sleepTimer: Timer?
     private var audioFile: AVAudioFile?
     private var seekFrame: AVAudioFramePosition = 0
     private var audioSampleRate: Double = 44100
@@ -67,8 +72,10 @@ class AudioEngine: ObservableObject {
     private func setupAudioChain() {
         engine.attach(playerNode)
         engine.attach(eq)
+        engine.attach(timePitch)
         engine.connect(playerNode, to: eq, format: nil)
-        engine.connect(eq, to: engine.mainMixerNode, format: nil)
+        engine.connect(eq, to: timePitch, format: nil)
+        engine.connect(timePitch, to: engine.mainMixerNode, format: nil)
         engine.mainMixerNode.outputVolume = effectiveVolume
     }
 
@@ -141,12 +148,43 @@ class AudioEngine: ObservableObject {
 
     func stop() {
         print("🟡 stop() called, gen=\(playbackGeneration), isPlaying=\(isPlaying)")
+        cancelSleepTimer()
         playerNode.stop()
         isPlaying = false
         currentTime = 0
         seekFrame = 0
         needsScheduling = true
         stopTimeUpdates()
+    }
+
+    // MARK: - Playback Speed
+    func setPlaybackSpeed(_ rate: Float) {
+        let clamped = max(0.5, min(2.0, rate))
+        timePitch.rate = clamped
+        playbackSpeed = clamped
+    }
+
+    // MARK: - Sleep Timer
+    func setSleepTimer(minutes: Int) {
+        cancelSleepTimer()
+        let endDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        sleepTimerRemaining = TimeInterval(minutes * 60)
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let remaining = endDate.timeIntervalSinceNow
+            if remaining <= 0 {
+                self.cancelSleepTimer()
+                self.stop()
+            } else {
+                self.sleepTimerRemaining = remaining
+            }
+        }
+    }
+
+    func cancelSleepTimer() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepTimerRemaining = nil
     }
 
     func togglePlayPause() {
@@ -166,6 +204,12 @@ class AudioEngine: ObservableObject {
         } else {
             currentTime = time
         }
+    }
+
+    // MARK: - Output Device
+    func selectOutputDevice(_ deviceID: AudioDeviceID) {
+        OutputDeviceManager.setOutputDevice(deviceID, on: engine)
+        currentOutputDeviceID = deviceID
     }
 
     // MARK: - EQ
