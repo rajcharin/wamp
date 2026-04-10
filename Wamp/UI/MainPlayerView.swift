@@ -34,8 +34,6 @@ class MainPlayerView: NSView {
     private let seekSlider = WinampSlider(style: .seek)
     private let volumeSlider = WinampSlider(style: .volume)
     private let balanceSlider = WinampSlider(style: .balance)
-    private let speedSlider = WinampSlider(style: .seek)
-    private let speedLabel = NSTextField(labelWithString: "SPD 1.0x")
     private let transportBar = TransportBar()
 
     // Toggle buttons
@@ -95,9 +93,7 @@ class MainPlayerView: NSView {
         // Title bar
         titleBar.titleText = "WAMP"
         titleBar.showButtons = true
-        titleBar.showThemeButton = true
-        titleBar.showSleepButton = true
-        titleBar.showOutputButton = true
+        titleBar.showSettingsButton = true
         titleBar.onClose = { NSApp.terminate(nil) }
         titleBar.onMinimize = { [weak self] in self?.window?.miniaturize(nil) }
         titleBar.onTogglePin = { [weak self] in self?.onTogglePin?() }
@@ -155,22 +151,6 @@ class MainPlayerView: NSView {
         balanceSlider.minValue = 0
         balanceSlider.maxValue = 1
         addSubview(balanceSlider)
-
-        // Speed slider
-        speedSlider.minValue = 0.5
-        speedSlider.maxValue = 2.0
-        speedSlider.value = 1.0
-        addSubview(speedSlider)
-
-        // Speed label
-        speedLabel.isBezeled = false
-        speedLabel.drawsBackground = false
-        speedLabel.isEditable = false
-        speedLabel.isSelectable = false
-        speedLabel.font = WinampTheme.bitrateFont
-        speedLabel.textColor = WinampTheme.greenDimText
-        speedLabel.alignment = .right
-        addSubview(speedLabel)
 
         // Transport bar
         addSubview(transportBar)
@@ -315,14 +295,8 @@ class MainPlayerView: NSView {
         volumeSlider.frame = NSRect(x: pad, y: sliderTop - 8, width: halfW, height: 8)
         balanceSlider.frame = NSRect(x: pad + halfW + 4, y: sliderTop - 8, width: halfW, height: 8)
 
-        // Speed slider + label
-        let speedLabelW: CGFloat = 42
-        let speedRow = sliderTop - 12
-        speedLabel.frame = NSRect(x: w - pad - speedLabelW, y: speedRow - 8, width: speedLabelW, height: 8)
-        speedSlider.frame = NSRect(x: pad, y: speedRow - 8, width: w - 2 * pad - speedLabelW - 2, height: 8)
-
         // Transport row
-        let transportTop = speedRow - 12
+        let transportTop = sliderTop - 12
         transportBar.frame = NSRect(x: pad, y: transportTop - 18, width: transportBar.intrinsicContentSize.width, height: 18)
 
         // Right side: shuffle, repeat, EQ, PL, INFO
@@ -419,19 +393,36 @@ class MainPlayerView: NSView {
             }
             .store(in: &cancellables)
 
-        // Speed slider
-        speedSlider.value = audioEngine.playbackSpeed
-        speedSlider.onChange = { [weak audioEngine, weak self] value in
-            audioEngine?.setPlaybackSpeed(value)
-            self?.speedLabel.stringValue = String(format: "SPD %.1fx", value)
+        // Seek bar right-click → speed preset menu
+        seekSlider.onRightClick = { [weak self] in self?.showSpeedMenu() }
+    }
+
+    private func showSpeedMenu() {
+        let menu = NSMenu()
+        let speeds: [(String, Float)] = [
+            ("0.5×  (half speed)", 0.5),
+            ("0.75×", 0.75),
+            ("1.0×  (normal)", 1.0),
+            ("1.25×", 1.25),
+            ("1.5×", 1.5),
+            ("2.0×  (double speed)", 2.0)
+        ]
+        let current = audioEngine?.playbackSpeed ?? 1.0
+        for (title, rate) in speeds {
+            let item = NSMenuItem(title: title, action: #selector(applySpeed(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = rate
+            item.state = abs(current - rate) < 0.01 ? .on : .off
+            menu.addItem(item)
         }
-        audioEngine.$playbackSpeed
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] speed in
-                self?.speedSlider.value = speed
-                self?.speedLabel.stringValue = String(format: "SPD %.1fx", speed)
-            }
-            .store(in: &cancellables)
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: seekSlider.frame.minX, y: seekSlider.frame.minY),
+                   in: self)
+    }
+
+    @objc private func applySpeed(_ item: NSMenuItem) {
+        guard let rate = item.representedObject as? Float else { return }
+        audioEngine?.setPlaybackSpeed(rate)
     }
 
     private func updateTrackInfo() {

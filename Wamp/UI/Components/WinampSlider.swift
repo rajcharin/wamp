@@ -17,6 +17,7 @@ class WinampSlider: NSView {
     var minValue: Float = 0
     var maxValue: Float = 1
     var onChange: ((Float) -> Void)?
+    var onRightClick: (() -> Void)?
     var style: WinampSliderStyle = .seek
     var isVertical: Bool = false
 
@@ -210,6 +211,10 @@ class WinampSlider: NSView {
     override func mouseUp(with event: NSEvent) {
         isDragging = false
         isUserInteracting = false
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        onRightClick?()
     }
 
     private func updateValueFromMouse(_ event: NSEvent) {
