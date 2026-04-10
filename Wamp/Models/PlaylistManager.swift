@@ -5,6 +5,7 @@ class PlaylistManager: ObservableObject {
     @Published var tracks: [Track] = []
     @Published var currentIndex: Int = -1
     @Published var searchQuery = ""
+    @Published var upNextQueue: [UUID] = []
 
     private var cancellables = Set<AnyCancellable>()
     private weak var audioEngine: AudioEngine?
@@ -139,6 +140,8 @@ class PlaylistManager: ObservableObject {
             return
         }
         print("⚡ playTrack(at: \(index)) — \(tracks[index].url.lastPathComponent)")
+        tracks[index].playCount += 1
+        tracks[index].lastPlayed = Date()
         currentIndex = index
         audioEngine?.loadAndPlay(url: tracks[index].url)
     }
@@ -146,6 +149,15 @@ class PlaylistManager: ObservableObject {
     func playNext() {
         print("⚡ playNext: currentIndex=\(currentIndex), tracks.count=\(tracks.count)")
         guard !tracks.isEmpty else { return }
+
+        // Dequeue from Up Next first
+        if !upNextQueue.isEmpty {
+            let nextId = upNextQueue.removeFirst()
+            if let idx = tracks.firstIndex(where: { $0.id == nextId }) {
+                playTrack(at: idx)
+                return
+            }
+        }
 
         let nextIndex = currentIndex + 1
         if nextIndex >= tracks.count {
@@ -157,6 +169,20 @@ class PlaylistManager: ObservableObject {
         } else {
             playTrack(at: nextIndex)
         }
+    }
+
+    // MARK: - Queue / Up Next
+    func addToQueue(_ trackId: UUID) {
+        upNextQueue.append(trackId)
+    }
+
+    func removeFromQueue(at index: Int) {
+        guard index >= 0, index < upNextQueue.count else { return }
+        upNextQueue.remove(at: index)
+    }
+
+    func clearQueue() {
+        upNextQueue.removeAll()
     }
 
     func playPrevious() {
@@ -200,6 +226,70 @@ class PlaylistManager: ObservableObject {
         let urls = paths.compactMap { path -> URL? in
             if let url = URL(string: path), url.scheme == "file" { return url }
             return URL(fileURLWithPath: path)
+        }
+        await addURLs(urls)
+    }
+
+    // MARK: - M3U / PLS Import & Export
+    func exportM3U(to url: URL) {
+        var lines = ["#EXTM3U"]
+        for track in tracks {
+            let duration = Int(track.duration)
+            let display = track.artist.isEmpty ? track.title : "\(track.artist) - \(track.title)"
+            lines.append("#EXTINF:\(duration),\(display)")
+            lines.append(track.url.path)
+        }
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func exportPLS(to url: URL) {
+        var lines = ["[playlist]"]
+        for (i, track) in tracks.enumerated() {
+            let n = i + 1
+            lines.append("File\(n)=\(track.url.path)")
+            lines.append("Title\(n)=\(track.displayTitle)")
+            lines.append("Length\(n)=\(Int(track.duration))")
+        }
+        lines.append("NumberOfEntries=\(tracks.count)")
+        lines.append("Version=2")
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func importM3U(from url: URL) async {
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let baseDir = url.deletingLastPathComponent()
+        var urls: [URL] = []
+        for line in content.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            if trimmed.hasPrefix("/") {
+                urls.append(URL(fileURLWithPath: trimmed))
+            } else if trimmed.hasPrefix("file://") {
+                if let u = URL(string: trimmed) { urls.append(u) }
+            } else {
+                urls.append(baseDir.appendingPathComponent(trimmed))
+            }
+        }
+        await addURLs(urls)
+    }
+
+    func importPLS(from url: URL) async {
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let baseDir = url.deletingLastPathComponent()
+        var urls: [URL] = []
+        for line in content.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.lowercased().hasPrefix("file") else { continue }
+            let parts = trimmed.components(separatedBy: "=")
+            guard parts.count >= 2 else { continue }
+            let path = parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespaces)
+            if path.hasPrefix("/") {
+                urls.append(URL(fileURLWithPath: path))
+            } else if path.hasPrefix("file://") {
+                if let u = URL(string: path) { urls.append(u) }
+            } else {
+                urls.append(baseDir.appendingPathComponent(path))
+            }
         }
         await addURLs(urls)
     }
