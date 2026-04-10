@@ -14,6 +14,7 @@ struct AppState: Codable {
     var lastTrackIndex: Int = -1
     var lastPlaybackPosition: Double = 0
     var themeName: String = "Classic"
+    var playbackSpeed: Float = 1.0
 }
 
 struct EQState: Codable {
@@ -68,6 +69,7 @@ class StateManager {
         state.lastTrackIndex = playlistManager.currentIndex
         state.lastPlaybackPosition = audioEngine.currentTime
         state.themeName = ThemeManager.shared.current.name
+        state.playbackSpeed = audioEngine.playbackSpeed
         write(state, to: "state.json")
     }
 
@@ -100,6 +102,7 @@ class StateManager {
         state.lastTrackIndex = playlistManager.currentIndex
         state.lastPlaybackPosition = audioEngine.currentTime
         state.themeName = ThemeManager.shared.current.name
+        state.playbackSpeed = audioEngine.playbackSpeed
         write(state, to: "state.json")
     }
 

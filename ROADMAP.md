@@ -7,6 +7,7 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 ## UI / UX
 
 - [x] UI theme selector — choose from built-in themes (Classic, Dark Steel, Amber, Midnight, Soft Green)
+- [x] File info panel — show codec, bitrate, sample rate, channels, file size, play count, last played (INFO button)
 - [ ] Mini player / menu bar mode — compact floating player or menu-bar-only playback control
 - [ ] Lyrics display — read embedded USLT/SYLT tags; show plain or synchronized lyrics
 - [ ] Rating system — 1–5 stars per track, stored in app state; feeds into smart playlists
@@ -19,9 +20,9 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 - [ ] Watched folder — auto-detect new audio files dropped into a configured folder via FSEvents
 - [ ] Multiple named playlists — sidebar or tab switching between saved playlists
 - [ ] Artist / Album browser panel — hierarchical grouping: artist → album → tracks
-- [ ] Play count + last played tracking — persisted in app state per track URL
+- [x] Play count + last played tracking — persisted in playlist.json per track
 - [ ] Smart playlists — auto-generated lists filtered by genre, year range, play count, or rating
-- [ ] Missing file detection — highlight tracks in red whose files no longer exist on disk
+- [x] Missing file detection — highlight tracks in red whose files no longer exist on disk
 - [ ] Duplicate detection — find tracks with the same title+artist or identical file hash
 
 ---
@@ -31,10 +32,10 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 - [ ] Gapless playback — schedule audio buffers back-to-back in AVAudioEngine (no silence between tracks)
 - [ ] Crossfade — configurable fade-out/fade-in duration between tracks
 - [ ] ReplayGain — read R128 / RG tags and normalize volume per track to prevent level jumps
-- [ ] Queue / Up Next — temporary play queue that doesn't reorder the main playlist
-- [ ] Sleep timer — automatically stop playback after a user-configured number of minutes
+- [x] Queue / Up Next — temporary play queue; right-click "Add to Queue", position badge in playlist
+- [x] Sleep timer — ZZZ button in title bar; countdown stops playback; 15/30/45/60 min options
 - [ ] A-B loop — mark a start and end point in a track and loop that segment continuously
-- [ ] Playback speed — 0.5×–2× speed control without pitch shift via `AVAudioUnitTimePitch`
+- [x] Playback speed — 0.5×–2× speed slider in player; persists across launches
 
 ---
 
@@ -42,15 +43,15 @@ Tracked feature backlog for [rajcharin/wamp](https://github.com/rajcharin/wamp),
 
 - [ ] Tag editor — edit title, artist, album, genre, year directly inside the app
 - [ ] Bulk tag editor — apply shared field values (e.g. album name, genre) to a multi-selection
-- [ ] File info panel — show full technical details: format, codec, bitrate, sample rate, channels, file size
-- [ ] M3U / PLS import and export — interoperability with other players and playlist tools
+- [x] File info panel — show full technical details: codec, bitrate, sample rate, channels, file size
+- [x] M3U / PLS import and export — import/export via ADD menu; standard format support
 - [ ] Duplicate detection — find tracks with identical audio fingerprints or metadata
 
 ---
 
 ## Audio
 
-- [ ] Output device selector — route audio to any available CoreAudio output (headphones, speakers, AirPlay)
+- [x] Output device selector — OUT button in title bar; lists all CoreAudio outputs with checkmark
 - [ ] Stereo / mono toggle — collapse stereo channels for single-speaker or accessibility use
 
 ---

@@ -32,6 +32,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         audioEngine.balance = appState.balance
         audioEngine.repeatMode = RepeatMode(rawValue: appState.repeatMode) ?? .off
         audioEngine.eqEnabled = appState.eqEnabled
+        audioEngine.setPlaybackSpeed(appState.playbackSpeed)
+        audioEngine.currentOutputDeviceID = OutputDeviceManager.currentOutputDeviceID()
 
 
         let eqState = stateManager.loadEQState()

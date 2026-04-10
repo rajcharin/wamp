@@ -5,6 +5,7 @@ class MainWindow: NSWindow {
     let mainPlayerView = MainPlayerView()
     let equalizerView = EqualizerView()
     let playlistView = PlaylistView()
+    let fileInfoPanel = FileInfoPanel()
     private var cancellables = Set<AnyCancellable>()
     private weak var audioEngine: AudioEngine?
 
@@ -20,6 +21,14 @@ class MainWindow: NSWindow {
         didSet {
             playlistView.isHidden = !showPlaylist
             mainPlayerView.isPLActive = showPlaylist
+            recalculateSize()
+        }
+    }
+
+    var showFileInfo: Bool = false {
+        didSet {
+            fileInfoPanel.isHidden = !showFileInfo
+            mainPlayerView.isINFOActive = showFileInfo
             recalculateSize()
         }
     }
@@ -61,8 +70,10 @@ class MainWindow: NSWindow {
         contentView = container
 
         container.addSubview(mainPlayerView)
+        container.addSubview(fileInfoPanel)
         container.addSubview(equalizerView)
         container.addSubview(playlistView)
+        fileInfoPanel.isHidden = true
 
         layoutSections()
     }
@@ -76,7 +87,14 @@ class MainWindow: NSWindow {
         y -= WinampTheme.mainPlayerHeight
         mainPlayerView.frame = NSRect(x: 0, y: y, width: w, height: WinampTheme.mainPlayerHeight)
 
-        // Equalizer — below player
+        // File info — below player
+        if showFileInfo {
+            let infoH = FileInfoPanel.panelHeight
+            y -= infoH
+            fileInfoPanel.frame = NSRect(x: 0, y: y, width: w, height: infoH)
+        }
+
+        // Equalizer — below file info (or player)
         if showEqualizer {
             y -= WinampTheme.equalizerHeight
             equalizerView.frame = NSRect(x: 0, y: y, width: w, height: WinampTheme.equalizerHeight)
@@ -91,6 +109,7 @@ class MainWindow: NSWindow {
 
     func recalculateSize() {
         var height: CGFloat = WinampTheme.mainPlayerHeight
+        if showFileInfo { height += FileInfoPanel.panelHeight }
         if showEqualizer { height += WinampTheme.equalizerHeight }
         if showPlaylist { height += WinampTheme.playlistMinHeight }
 
@@ -143,6 +162,24 @@ class MainWindow: NSWindow {
         equalizerView.bindToModel(audioEngine: audioEngine, playlistManager: playlistManager)
         playlistView.bindToModel(playlistManager: playlistManager)
 
+        // File info panel — update when current track changes
+        playlistManager.$currentIndex
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak playlistManager] _ in
+                self?.fileInfoPanel.configure(with: playlistManager?.currentTrack)
+            }
+            .store(in: &cancellables)
+
+        // Reflect play count updates (track is mutated on play)
+        playlistManager.$tracks
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak playlistManager] _ in
+                if self?.showFileInfo == true {
+                    self?.fileInfoPanel.configure(with: playlistManager?.currentTrack)
+                }
+            }
+            .store(in: &cancellables)
+
         mainPlayerView.onToggleEQ = { [weak self] in
             self?.showEqualizer.toggle()
         }
@@ -151,6 +188,9 @@ class MainWindow: NSWindow {
         }
         mainPlayerView.onTogglePin = { [weak self] in
             self?.alwaysOnTop.toggle()
+        }
+        mainPlayerView.onToggleINFO = { [weak self] in
+            self?.showFileInfo.toggle()
         }
     }
 }

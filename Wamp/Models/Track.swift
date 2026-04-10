@@ -19,10 +19,15 @@ struct Track: Identifiable, Codable, Equatable {
     var channels: Int
     var trackNumber: Int
     var year: Int
+    var playCount: Int = 0
+    var lastPlayed: Date? = nil
+    var fileSize: Int64 = 0
+    var codec: String = ""
 
     // Explicit CodingKeys so artworkImage (NSImage) stays out of JSON
     enum CodingKeys: String, CodingKey {
         case id, url, title, artist, album, duration, genre, bitrate, sampleRate, channels, trackNumber, year
+        case playCount, lastPlayed, fileSize, codec
     }
 
     init(from decoder: Decoder) throws {
@@ -39,6 +44,10 @@ struct Track: Identifiable, Codable, Equatable {
         channels = try c.decode(Int.self, forKey: .channels)
         trackNumber = try c.decodeIfPresent(Int.self, forKey: .trackNumber) ?? 0
         year = try c.decodeIfPresent(Int.self, forKey: .year) ?? 0
+        playCount = try c.decodeIfPresent(Int.self, forKey: .playCount) ?? 0
+        lastPlayed = try c.decodeIfPresent(Date.self, forKey: .lastPlayed)
+        fileSize = try c.decodeIfPresent(Int64.self, forKey: .fileSize) ?? 0
+        codec = try c.decodeIfPresent(String.self, forKey: .codec) ?? ""
     }
 
     init(
@@ -52,7 +61,9 @@ struct Track: Identifiable, Codable, Equatable {
         sampleRate: Int = 0,
         channels: Int = 2,
         trackNumber: Int = 0,
-        year: Int = 0
+        year: Int = 0,
+        fileSize: Int64 = 0,
+        codec: String = ""
     ) {
         self.id = UUID()
         self.url = url
@@ -66,6 +77,8 @@ struct Track: Identifiable, Codable, Equatable {
         self.channels = channels
         self.trackNumber = trackNumber
         self.year = year
+        self.fileSize = fileSize
+        self.codec = codec
     }
 
     var displayTitle: String {
@@ -145,6 +158,10 @@ struct Track: Identifiable, Codable, Equatable {
         var channels = 2
         var trackNumber = 0
         var year = 0
+        var fileSize: Int64 = 0
+        var codec = ""
+
+        fileSize = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
 
         do {
             let metadata = try await asset.load(.commonMetadata)
@@ -199,6 +216,27 @@ struct Track: Identifiable, Codable, Equatable {
                 }
                 let estimatedRate = try await audioTrack.load(.estimatedDataRate)
                 bitrate = Int(estimatedRate / 1000)
+
+                // Extract codec from format description 4CC
+                if let desc = descriptions.first {
+                    let subType = CMFormatDescriptionGetMediaSubType(desc)
+                    var bytes = [UInt8](repeating: 0, count: 4)
+                    bytes[0] = UInt8((subType >> 24) & 0xFF)
+                    bytes[1] = UInt8((subType >> 16) & 0xFF)
+                    bytes[2] = UInt8((subType >> 8) & 0xFF)
+                    bytes[3] = UInt8(subType & 0xFF)
+                    let raw = String(bytes: bytes, encoding: .ascii)?.trimmingCharacters(in: .whitespaces) ?? ""
+                    switch raw.lowercased() {
+                    case "aac ", "aac": codec = "AAC"
+                    case "mp3 ", ".mp3": codec = "MP3"
+                    case "alac": codec = "ALAC"
+                    case "flac": codec = "FLAC"
+                    case "lpcm": codec = "PCM"
+                    case "ulaw": codec = "µLaw"
+                    case "alaw": codec = "ALaw"
+                    default: codec = raw.isEmpty ? "" : raw.uppercased()
+                    }
+                }
             }
         } catch {
             // Fallback: use filename as title
@@ -215,7 +253,9 @@ struct Track: Identifiable, Codable, Equatable {
             sampleRate: sampleRate,
             channels: channels,
             trackNumber: trackNumber,
-            year: year
+            year: year,
+            fileSize: fileSize,
+            codec: codec
         )
     }
 }
