@@ -1,0 +1,118 @@
+name: Release
+
+# Trigger on version tags (e.g. v1.2.0) or manual dispatch
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label (e.g. v1.2.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-dmg:
+    name: Build & Release DMG
+    runs-on: macos-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Resolve version ─────────────────────────────────────────────────────
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Select Xcode ────────────────────────────────────────────────────────
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      # ── Build archive ───────────────────────────────────────────────────────
+      - name: Build archive
+        run: |
+          xcodebuild archive \
+            -project Wamp.xcodeproj \
+            -scheme Wamp \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/Wamp.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || true
+
+      # ── Export .app ─────────────────────────────────────────────────────────
+      - name: Export app
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Wamp.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist ExportOptions.plist
+
+      # ── Create DMG ──────────────────────────────────────────────────────────
+      - name: Create DMG
+        run: |
+          VERSION=${{ steps.version.outputs.tag }}
+          DMG_NAME="Wamp-${VERSION}.dmg"
+          APP_PATH="$RUNNER_TEMP/export/Wamp.app"
+          STAGING="$RUNNER_TEMP/dmg-staging"
+
+          # Build a staging folder with the .app and a symlink to /Applications
+          mkdir -p "$STAGING"
+          cp -r "$APP_PATH" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+
+          # Create a compressed DMG with Applications symlink for drag-install UX
+          hdiutil create \
+            -volname "Wamp ${VERSION}" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            -fs HFS+ \
+            "$RUNNER_TEMP/${DMG_NAME}"
+
+          echo "DMG_PATH=$RUNNER_TEMP/${DMG_NAME}" >> $GITHUB_ENV
+          echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_ENV
+
+      # ── Generate changelog from commits since last tag ──────────────────────
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep '^v' | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --pretty=format:"- %s" | head -30)
+          else
+            LOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s")
+          fi
+          # Write multiline output safely
+          {
+            echo 'notes<<EOF'
+            echo "## What's Changed"
+            echo ""
+            echo "$LOG"
+            echo ""
+            echo "---"
+            echo "_Built from commit \`$(git rev-parse --short HEAD)\` on \`$(date -u '+%Y-%m-%d')\`_"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      # ── Create GitHub Release ───────────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Wamp ${{ steps.version.outputs.tag }}
+          body: ${{ steps.changelog.outputs.notes }}
+          files: ${{ env.DMG_PATH }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

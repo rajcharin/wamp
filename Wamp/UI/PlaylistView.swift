@@ -27,6 +27,10 @@ class PlaylistView: NSView {
         wantsLayer = true
         layer?.backgroundColor = WinampTheme.frameBackground.cgColor
         setupSubviews()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
         registerForDraggedTypes([.fileURL])
         tableView.registerForDraggedTypes([PlaylistView.internalRowType, .fileURL])
         tableView.draggingDestinationFeedbackStyle = .gap
@@ -34,6 +38,19 @@ class PlaylistView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() {
+        layer?.backgroundColor = WinampTheme.frameBackground.cgColor
+        tableView.backgroundColor = WinampTheme.playlistRowBackground
+        scrollView.backgroundColor = WinampTheme.playlistRowBackground
+        searchField.textColor = WinampTheme.greenBright
+        searchField.backgroundColor = WinampTheme.searchFieldBackground
+        infoLabel.textColor = WinampTheme.greenBright
+        infoLabel.backgroundColor = WinampTheme.playlistRowBackground
+        needsDisplay = true
+        tableView.reloadData()
+        subviews.forEach { $0.needsDisplay = true }
+    }
 
     private func setupSubviews() {
         titleBar.titleText = "WAMP PLAYLIST"
@@ -45,7 +62,7 @@ class PlaylistView: NSView {
         column.width = WinampTheme.windowWidth - 20
         tableView.addTableColumn(column)
         tableView.headerView = nil
-        tableView.backgroundColor = .black
+        tableView.backgroundColor = WinampTheme.playlistRowBackground
         tableView.rowHeight = 18
         tableView.intercellSpacing = NSSize(width: 0, height: 0)
         tableView.allowsMultipleSelection = true
@@ -66,7 +83,7 @@ class PlaylistView: NSView {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
-        scrollView.backgroundColor = .black
+        scrollView.backgroundColor = WinampTheme.playlistRowBackground
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
 
@@ -78,7 +95,7 @@ class PlaylistView: NSView {
         searchField.placeholderString = "Search playlist..."
         searchField.font = WinampTheme.bitrateFont
         searchField.textColor = WinampTheme.greenBright
-        searchField.backgroundColor = NSColor(hex: 0x0A0E0A)
+        searchField.backgroundColor = WinampTheme.searchFieldBackground
         searchField.isBordered = true
         searchField.isBezeled = true
         searchField.bezelStyle = .squareBezel
@@ -99,7 +116,7 @@ class PlaylistView: NSView {
         // Info label
         infoLabel.font = WinampTheme.bitrateFont
         infoLabel.textColor = WinampTheme.greenBright
-        infoLabel.backgroundColor = .black
+        infoLabel.backgroundColor = WinampTheme.playlistRowBackground
         infoLabel.drawsBackground = true
         infoLabel.isBezeled = false
         infoLabel.isEditable = false
@@ -471,7 +488,7 @@ class WinampRowView: NSTableRowView {
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
-        NSColor.black.setFill()
+        WinampTheme.playlistRowBackground.setFill()
         bounds.fill()
     }
 }

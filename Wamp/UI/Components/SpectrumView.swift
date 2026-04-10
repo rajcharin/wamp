@@ -4,6 +4,18 @@ class SpectrumView: NSView {
     var spectrumData: [Float] = [] { didSet { needsDisplay = true } }
     var barCount: Int = 26
 
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() { needsDisplay = true }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 

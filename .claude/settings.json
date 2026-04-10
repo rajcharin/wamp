@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, json\nd = json.load(sys.stdin)\npath = d.get('tool_input', {}).get('file_path', '')\nif path.endswith('.swift'):\n    print(f'[wamp] Swift file modified: {path.split(\"/\")[-1]} — run /build-reload to rebuild and relaunch')\n\""
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Code needs your input\" with title \"Wamp Dev\" sound name \"Submarine\"'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null)\" && status=$(git status --short) && branch=$(git branch --show-current) && echo \"[wamp] Branch: $branch\" && if [ -n \"$status\" ]; then echo \"[wamp] Uncommitted changes:\"; echo \"$status\"; else echo \"[wamp] Working tree clean\"; fi'"
+          }
+        ]
+      }
+    ]
+  }
+}

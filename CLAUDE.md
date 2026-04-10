@@ -73,6 +73,71 @@ MainWindow stacks three panels vertically in a fixed 275px-wide borderless windo
 - **HotKeyManager** — handles media keys and publishes Now Playing info to Control Center via `MPNowPlayingInfoCenter`
 - **WinampTheme** — centralizes all design tokens; retro palette uses grays, golds, and greens
 
+## Git Workflow (Gitflow)
+
+```
+main      ← production; tagged releases only
+develop   ← integration branch; all features merge here first
+feature/* ← branch from develop; merge back to develop via PR
+release/* ← branch from develop when ready to ship; merge to main + develop
+hotfix/*  ← branch from main for urgent fixes; merge to main + develop
+```
+
+**Starting a feature:**
+```bash
+git checkout develop && git pull origin develop
+git checkout -b feature/my-feature
+# ... work ...
+git push origin feature/my-feature
+gh pr create --base develop
+```
+
+**Creating a release:**
+```bash
+git checkout -b release/1.2.0 develop
+# bump version, test, fix only
+git checkout main && git merge --no-ff release/1.2.0 && git tag v1.2.0
+git checkout develop && git merge --no-ff release/1.2.0
+git push origin main develop --tags
+```
+
+**Hotfix:**
+```bash
+git checkout -b hotfix/crash-fix main
+# fix ...
+git checkout main && git merge --no-ff hotfix/crash-fix && git tag v1.1.1
+git checkout develop && git merge --no-ff hotfix/crash-fix
+```
+
+## Claude Code Setup
+
+### Skills (slash commands)
+
+| Command | Description |
+|---------|-------------|
+| `/build` | Build with xcodebuild and report errors |
+| `/reload` | Kill Wamp and relaunch from last build |
+| `/build-reload` | Build + reload in one step (primary dev cycle) |
+
+Skill definitions are in `.claude/skills/`.
+
+### Hooks (`.claude/settings.json`)
+
+| Hook | Trigger | Action |
+|------|---------|--------|
+| `PostToolUse` | Edit/Write on `.swift` files | Prints reminder to run `/build-reload` |
+| `Notification` | Claude needs input | Shows macOS notification with sound |
+| `Stop` | Claude finishes a turn | Prints current branch + uncommitted file list |
+
+### MCP Servers (`.mcp.json`)
+
+| Server | Purpose |
+|--------|---------|
+| `github` | Create/manage issues and PRs for `rajcharin/wamp` — requires `GITHUB_TOKEN` env var |
+| `filesystem` | Direct file access scoped to the project root |
+
+To activate GitHub MCP: `export GITHUB_TOKEN=ghp_...` in your shell before launching Claude Code.
+
 ## Conventions
 
 - Commit messages use conventional format: `feat:`, `fix:`, `chore:`, `style:`

@@ -38,9 +38,19 @@ class EqualizerView: NSView {
         wantsLayer = true
         layer?.backgroundColor = WinampTheme.frameBackground.cgColor
         setupSubviews()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange),
+            name: ThemeManager.didChangeNotification, object: nil
+        )
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func themeDidChange() {
+        layer?.backgroundColor = WinampTheme.frameBackground.cgColor
+        needsDisplay = true
+        subviews.forEach { $0.needsDisplay = true }
+    }
 
     private func setupSubviews() {
         titleBar.titleText = "WAMP EQUALIZER"

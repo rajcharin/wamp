@@ -31,3 +31,6 @@ playground.xcworkspace
 
 # Tools
 .superpowers/
+
+# Claude Code local settings (user-specific paths/permissions)
+.claude/settings.local.json

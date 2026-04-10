@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- mac-application = unsigned direct distribution (no App Store, no notarization) -->
+    <key>method</key>
+    <string>mac-application</string>
+
+    <key>signingStyle</key>
+    <string>manual</string>
+
+    <!-- Strip Swift standard library symbols to reduce binary size -->
+    <key>stripSwiftSymbols</key>
+    <true/>
+
+    <!-- Destination: export the .app bundle directly -->
+    <key>destination</key>
+    <string>export</string>
+</dict>
+</plist>
