@@ -6,14 +6,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"\nimport sys, json\nd = json.load(sys.stdin)\npath = d.get('tool_input', {}).get('file_path', '')\nif path.endswith('.swift'):\n    print(f'[wamp] Swift file modified: {path.split(\"/\")[-1]} — run /build-reload to rebuild and relaunch')\n\""
+            "command": "python3 .claude/hooks/post-edit.sh"
           }
         ]
       }
     ],
     "Notification": [
       {
-        "matcher": "",
+        "matcher": ".*",
         "hooks": [
           {
             "type": "command",
@@ -24,11 +24,11 @@
     ],
     "Stop": [
       {
-        "matcher": "",
+        "matcher": ".*",
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null)\" && status=$(git status --short) && branch=$(git branch --show-current) && echo \"[wamp] Branch: $branch\" && if [ -n \"$status\" ]; then echo \"[wamp] Uncommitted changes:\"; echo \"$status\"; else echo \"[wamp] Working tree clean\"; fi'"
+            "command": "bash -c 'branch=$(git branch --show-current 2>/dev/null) && status=$(git status --short 2>/dev/null) && echo \"[wamp] Branch: $branch\" && if [ -n \"$status\" ]; then echo \"[wamp] Uncommitted:\"; echo \"$status\"; else echo \"[wamp] Working tree clean\"; fi'"
           }
         ]
       }
