@@ -107,6 +107,9 @@ struct WinampThemeDefinition {
 
     // Panel backgrounds (player left/right panels)
     var panelBackground: NSColor
+
+    // Error state (missing files)
+    var errorColor: NSColor
 }
 
 // MARK: - Built-in Themes
@@ -193,7 +196,8 @@ extension WinampThemeDefinition {
         buttonFont:           defaultFonts.button,
         playlistFont:         defaultFonts.playlist,
         eqLabelFont:          defaultFonts.eqLabel,
-        panelBackground:      .black
+        panelBackground:      .black,
+        errorColor:           NSColor(hex: 0xFF4444)
     )
 
     /// Modern dark — blue-gray frame, white and cyan accents
@@ -266,7 +270,8 @@ extension WinampThemeDefinition {
         buttonFont:           defaultFonts.button,
         playlistFont:         defaultFonts.playlist,
         eqLabelFont:          defaultFonts.eqLabel,
-        panelBackground:      NSColor(hex: 0x060A10)
+        panelBackground:      NSColor(hex: 0x060A10),
+        errorColor:           NSColor(hex: 0xFF4444)
     )
 
     /// DOS terminal amber — warm amber LCD on dark brown frame
@@ -339,7 +344,8 @@ extension WinampThemeDefinition {
         buttonFont:           defaultFonts.button,
         playlistFont:         defaultFonts.playlist,
         eqLabelFont:          defaultFonts.eqLabel,
-        panelBackground:      NSColor(hex: 0x0C0800)
+        panelBackground:      NSColor(hex: 0x0C0800),
+        errorColor:           NSColor(hex: 0xFF4444)
     )
 
     /// Night mode — deep purple frame, violet and cyan accents
@@ -412,7 +418,8 @@ extension WinampThemeDefinition {
         buttonFont:           defaultFonts.button,
         playlistFont:         defaultFonts.playlist,
         eqLabelFont:          defaultFonts.eqLabel,
-        panelBackground:      NSColor(hex: 0x080410)
+        panelBackground:      NSColor(hex: 0x080410),
+        errorColor:           NSColor(hex: 0xFF4444)
     )
 
     /// Easy on the eyes — muted pastel greens, warm gray frame
@@ -485,7 +492,8 @@ extension WinampThemeDefinition {
         buttonFont:           defaultFonts.button,
         playlistFont:         defaultFonts.playlist,
         eqLabelFont:          defaultFonts.eqLabel,
-        panelBackground:      NSColor(hex: 0x0C1008)
+        panelBackground:      NSColor(hex: 0x0C1008),
+        errorColor:           NSColor(hex: 0xFF4444)
     )
 }
 
@@ -574,6 +582,9 @@ enum WinampTheme {
 
     // Panel backgrounds
     static var panelBackground: NSColor { ThemeManager.shared.current.panelBackground }
+
+    // Error state
+    static var errorColor: NSColor { ThemeManager.shared.current.errorColor }
 
     // Fonts
     static var titleBarFont:   NSFont { ThemeManager.shared.current.titleBarFont }
